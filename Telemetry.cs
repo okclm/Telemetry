@@ -188,7 +188,7 @@ namespace Telemetry
 
                 // Have we moved far enough to do something?
                 // Or, did the user press the capture telemetry key?
-                if ((timer > Settings.waitTime) || (howFar > Settings.distanceThreshold) || InputManager.GetKeyDown(InputManager.m_CurrentContext, Settings.options.captureKey))
+                if ((Settings.enableTelemetryTimeDataCapture && (timer > Settings.waitTime)) || (Settings.enableTelemetryDistanceDataCapture && (howFar > Settings.distanceThreshold)) || InputManager.GetKeyDown(InputManager.m_CurrentContext, Settings.options.captureKey))
                 {
                     // Are we here because the distance threshold was met or because the user pressed the capture key?
                     // Might add an indicator in the output data file reflecting that.  Might.

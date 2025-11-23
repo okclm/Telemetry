@@ -13,7 +13,7 @@ namespace Telemetry
 {
     internal class TelemetrySettings : JsonModSettings
     {     
-		[Section("General (Version 1.1) - 11/22/2025")]
+		[Section("General (Version 1.1) - 11/23/2025")]
 
         [Name("Enable telemetry data capture")]
         [Description("Enable/Disable telemetry data capture")]
@@ -35,10 +35,18 @@ namespace Telemetry
         [Description("Enables Desmos 3D compatible telemetry data for use with Desmos graphing calculator (https://www.desmos.com/3d)")]
         public bool alsoGenerateDesmos3DData = true;
 
+        [Name("Enable telemetry distance capture trigger")]
+        [Description("Enable/Disable telemetry distance data capture")]
+        public bool enableTelemetryDistanceDataCapture = true;
+
         [Name("Distance threshhold (meters)")]
         [Description("Telemetry data captured after player travels this distance")]
         [Slider(0, 100)]
         public int distanceThreshold = 10;
+
+        [Name("Enable telemetry time capture trigger")]
+        [Description("Enable/Disable telemetry time data capture")]
+        public bool enableTelemetryTimeDataCapture = true;
 
         [Name("Wait time threshhold (seconds)")]
         [Description("Telemetry data captured after wait time passes")]
@@ -59,6 +67,8 @@ namespace Telemetry
             Settings.onlyOutdoors = onlyOutdoors;
             Settings.alsoGenerateDesmos2DData = alsoGenerateDesmos2DData;
             Settings.alsoGenerateDesmos3DData = alsoGenerateDesmos3DData;
+            Settings.enableTelemetryTimeDataCapture = enableTelemetryTimeDataCapture;
+            Settings.enableTelemetryDistanceDataCapture = enableTelemetryDistanceDataCapture;
 
             /*
             TelemetryMain.distanceThreshold = distanceThreshold;
@@ -81,6 +91,8 @@ namespace Telemetry
         public static bool onlyOutdoors = true;
         public static bool alsoGenerateDesmos2DData = true;
         public static bool alsoGenerateDesmos3DData = true;
+        public static bool enableTelemetryTimeDataCapture = true;
+        public static bool enableTelemetryDistanceDataCapture = true;
 
         public static void OnLoad()
         {
@@ -94,6 +106,8 @@ namespace Telemetry
             onlyOutdoors = options.onlyOutdoors;
             alsoGenerateDesmos2DData = options.alsoGenerateDesmos2DData;
             alsoGenerateDesmos3DData = options.alsoGenerateDesmos3DData;
+            enableTelemetryTimeDataCapture = options.enableTelemetryTimeDataCapture;
+            enableTelemetryDistanceDataCapture = options.enableTelemetryDistanceDataCapture;
         }
     }
 }
