@@ -20,7 +20,7 @@ namespace Telemetry
         public bool enableTelemetryDataCapture = false;
 
         [Name("Capture Telemetry Key")]
-        [Description("Which key you press to capture telemetry data")]
+        [Description("Which key you press to manually capture telemetry data")]
         public KeyCode captureKey = KeyCode.Keypad0;
 
         [Name("Only capture telemetry data outdoors")]
