@@ -1,16 +1,17 @@
-﻿using MelonLoader;
-using UnityEngine;
+﻿using Il2Cpp;
 using Il2CppInterop;
 using Il2CppInterop.Runtime.Injection;
+using Il2CppNewtonsoft.Json.Linq;
+using Il2CppTLD.Stats;
+using MelonLoader;
+using MelonLoader.Utils;
 using System.Collections;
-using Il2Cpp;
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using System.Xml.Linq;
+using UnityEngine;
 using static Il2CppSystem.Net.ServicePointManager;
 using Scene = UnityEngine.SceneManagement;
-using System.Xml.Linq;
-using MelonLoader.Utils;
-using Il2CppTLD.Stats;
 
 /*
  * Stuff you need to know:
@@ -22,23 +23,43 @@ using Il2CppTLD.Stats;
  * 
  * Writing message to the HUD:
  * HUDMessage.AddMessage("string") will display a message on the player's HUD.
+ * 
+ * Adding glyphs like the down arrow to strings:
+ * // direct glyph (editor must be UTF‑8 / font supports glyph)
+    string s1 = "Down arrow: ↓";
+
+    // Unicode escape (works regardless of editor glyph support)
+    string s2 = "Down arrow: \u2193";
+
+    // 8‑digit escape (same result)
+    string s3 = "Down arrow: \U00002193";
+
+    // triangle alternative
+    string s4 = "Down triangle: \u25BC";
+
+    // char literal
+    char down = '\u2193';
+
+// Example usage with HUDMessage
+HUDMessage.AddMessage("Press " + s1);
  */
 
 namespace Telemetry
 {
     public class TelemetryMain : MelonMod
     {
-        // *** Stuff for capturing player position every waitTime seconds ***
-        // private float waitTime = 10.0f; // This needs to be a parameter controlled in the options menu.
-        private float timer = 0.0f;
+        // *** Stuff for capturing telemtry data every waitTime seconds ***
+        // private float waitTime = 10.0f; // This is a parameter controlled in the options menu.
+        public static float timer = 0.0f;
 
-        // *** Stuff for capturing player position when distance from previous position is greater than distance threshold ***
+        // *** Stuff for capturing telemtry data when player's distance from previous position is greater than distance threshold ***
         public static Vector3 previousPosition = new Vector3(0, 0, 0); // This tracks the previous player x,z position logged.
 
-        // Are we in the game nenu?
+        // Are we in the game menu?
         public static bool inMenu = true;
 
-        //internal const string LOG_FILE_FORMAT_VERSION_NUMBER = "1.0";             // The version # of the log file format.  This is used to determine if the log file format has changed and we need to update the code to read it.
+        public const string MOD_VERSION_NUMBER = "Version 1.1 - 11/25/2025";    // The version # of the mod.
+        //internal const string LOG_FILE_FORMAT_VERSION_NUMBER = "1.0";           // The version # of the log file format.  This is used to determine if the log file format has changed and we need to update the code to read it.
         internal const string DEFAULT_FILE_NAME = "Telemetry.log";                // The log file is written in the MODS folder for TLD  (i.e. D:\Program Files (x86)\Steam\steamapps\common\TheLongDark\Mods)
         internal const string FILE_NAME_DESMOS2D = "Telemetry_Desmos2D.log";      // The log file is written in the MODS folder for TLD  (i.e. D:\Program Files (x86)\Steam\steamapps\common\TheLongDark\Mods)
         internal const string FILE_NAME_DESMOS3D = "Telemetry_Desmos3D.log";      // The log file is written in the MODS folder for TLD  (i.e. D:\Program Files (x86)\Steam\steamapps\common\TheLongDark\Mods)
@@ -53,7 +74,7 @@ namespace Telemetry
 
         //internal static void CreateLogFile() => File.Create(GetFilePath());
 
-        private static void LogData(string text)
+        public static void LogData(string text)
         {
             if (text is null) return;
             File.AppendAllLines(GetFilePath(), new string[] { text });
@@ -111,6 +132,8 @@ namespace Telemetry
             Telemetry.Settings.OnLoad();
             // LogMessage($"[" + Scene.SceneManager.GetActiveScene().name + $" / Back from calling Telemetry.Settings.OnLoad()");
             // LogMessage($"[" + Scene.SceneManager.GetActiveScene().name + $" / Settings.enableTelemetryDataCapture={Settings.enableTelemetryDataCapture}]");
+
+            // LogData("; Starting Telemetry Version: " + MOD_VERSION_NUMBER);
         }
 
         public override void OnSceneWasLoaded(int buildIndex, string sceneName)
@@ -152,7 +175,7 @@ namespace Telemetry
             // If the player has moved further than distanceThreshold (10.0 by default) then we record the current scene and the player coordinates.
             // Note the inMenu bool should track if we are in the game (false) or in the menu (true).
             // Also note that the logged data starts with a semi-colon to indicate "comment" that we can ignore later.
-            // Only the data for sceen and player position does not start with a semi-colon.
+            // Only the telemetry data lines do not start with a semi-colon.
 
             timer += Time.deltaTime;
 
@@ -171,7 +194,7 @@ namespace Telemetry
             if (Settings.onlyOutdoors)
             {
                 // LogMessage($"; Only processing telemetry when outdoors.");
-                 //LogMessage($"; GameManager.GetWeatherComponent().IsIndoorEnvironment()=" + GameManager.GetWeatherComponent().IsIndoorEnvironment());
+                // LogMessage($"; GameManager.GetWeatherComponent().IsIndoorEnvironment()=" + GameManager.GetWeatherComponent().IsIndoorEnvironment());
                 if (GameManager.GetWeatherComponent().IsIndoorEnvironment())
                 {
                     // LogMessage($"; Telemetry not enabled for indoors.  No action taken.");
@@ -188,10 +211,10 @@ namespace Telemetry
 
                 // Have we moved far enough to do something?
                 // Or, did the user press the capture telemetry key?
+                // Or did the waitTime elapse?
                 if ((Settings.enableTelemetryTimeDataCapture && (timer > Settings.waitTime)) || (Settings.enableTelemetryDistanceDataCapture && (howFar > Settings.distanceThreshold)) || InputManager.GetKeyDown(InputManager.m_CurrentContext, Settings.options.captureKey))
                 {
                     // Are we here because the distance threshold was met or because the user pressed the capture key?
-                    // Might add an indicator in the output data file reflecting that.  Might.
                     string triggerCode = "K";   // Default is we are here because of a keypress.
                     if (howFar > Settings.distanceThreshold) { triggerCode = "D"; }  // We are here because the distance threshold was exceeded.
                     if (timer > Settings.waitTime) { triggerCode = "T"; }            // We are here because the waittime threshold was exceeded.
@@ -202,6 +225,9 @@ namespace Telemetry
                     // Determine the hours played.  This is a float and we can use it as a timestamp for the data.
                     float gameTime = GameManager.GetTimeOfDayComponent().GetHoursPlayedNotPaused();
 
+                    // Determine current scene name
+                    string? sceneName = Scene.SceneManager.GetActiveScene().name;
+
                     // Get the player position
                     Vector3 playerPos = GameManager.GetVpFPSPlayer().transform.position;    // Copy of player position coords
 
@@ -209,21 +235,41 @@ namespace Telemetry
                     Vector3 cameraPosition = GameManager.GetMainCamera().transform.position;
                     Vector2 cameraAngleElevation = GameManager.GetVpFPSCamera().Angle;
 
-                    // Get the current weather stage name
+                    // Get the current weather telemetry data
                     Weather weatherComponent = GameManager.GetWeatherComponent();
-                    WeatherStage ws = weatherComponent.GetWeatherStage();
-                    string weatherStageName = weatherComponent.GetWeatherStageDisplayName(ws);
+                    WeatherStage weatherStage = weatherComponent.GetWeatherStage();
+                    string weatherStageName = weatherComponent.GetWeatherStageDisplayName(weatherStage);
 
-                    float wct = weatherComponent.GetCurrentTemperature();
-                    float wctwwc = weatherComponent.GetCurrentTemperatureWithWindchill();
-                    float wcwc = weatherComponent.GetCurrentWindchill();
+                    // ** Example weather debug text (wdt).  Note it is multi-line and verbose.: **
+                    // Morning To Midday (51.59%)
+                    // Weather Set: LightFog_cannery. 4.27hrs. (61.6 %)
+                    // 00 >> LightFog.tr: 100.0 %. 2.63 / 4.27hrs
+                    // Custom Type Name: 
+                    // Wind Speed Base: 6.2 MPH.Target Wind Speed: 7.6 MPH.Angle Base: 314.6
+                    // Wind Actual Speed: 7.6 MPH.Actual Angle: 311.2
+                    // Player Speed: 0
+                    // Player Wind Angle: 0.0
+                    // Wwise WindIntensity: 10
+                    // Wwise GustStrength: 6
+                    // Local snow depth: 0.2355731
+                    // Aurora alpha: 0
+                    // Time Since Last Blizzard(4): 24.09688 
+
+                    string weatherDebugText = Weather.GetDebugWeatherText();
+                    string? weatherSetLine = GetLineStartingWith(weatherDebugText, "Weather Set");
+                    string? weatherSetValueText = GetTextAfterSeparator(weatherSetLine, ':');
+                    weatherSetValueText = GetTextBeforeSeparator(weatherSetValueText, '.');
+
+                    float weatherCurrentTemperature = weatherComponent.GetCurrentTemperature();
+                    float weatherCurrentTemperatureWithWindchill = weatherComponent.GetCurrentTemperatureWithWindchill();
+                    float weatherCurrentWindchill = weatherComponent.GetCurrentWindchill();
 
                     // Various ways to get the current save name and game id
                     //string currentSaveName = SaveGameSystem.GetCurrentSaveName();   // Example: "sandbox27"
                     //string csn = SaveGameSystem.m_CurrentSaveName;                  // Example: "sandbox27"
                     //uint cgi = SaveGameSystem.m_CurrentGameId;                      // Example: 27
 
-                    // TODO Make sure the user-defined save name is valid.  Replace any illega filename characters with an underscore.
+                    // TODO Make sure the user-defined save name is valid.  Replace any illegal filename characters with an underscore.
                     string ssUDF = SanitizeFileName(SaveGameSystem.GetNewestSaveSlotForActiveGame().m_UserDefinedName);   // Example: "FAR TERRITORY"
 
                     // How to get at the maps?
@@ -278,27 +324,50 @@ namespace Telemetry
                     {
                         // If the data file does not exist, Write a comment as the 1st line of the file with useful information (i.e. file format version #).
                         LogData("; Telemetry data file format version: " + Log_File_Format_Version_Number);
+                        LogData("; Telemetry Mod Version: " + MOD_VERSION_NUMBER);
                         LogData(";");
-                        LogData(";                                          ----- player -----   ------ camera ------ - camera-");
-                        LogData(";                                          -----position-----   ------position------ - angle   ---Weather--  -Current- -Current-   -Current Temp  -");
-                        LogData(";     irlDateTime  | gameTime  |sceneName |   x   |  y  |  z   |  x    |  y  |  z   | x  | y  |--- Stage -- |-- Temp - -WindChill- -With WindChill-  triggerCode        ;comment");
-                        //                               07/18/2025 06:56:56|0.028248226|LakeRegion|1019.26|26.55|444.12|1019.26|28.30|444.12|0.00|0.00|Partly Cloudy|-18.02 | -8.14| -26.16|D
+                        //LogData(";                                          ----- player -----   ------ camera ------ - camera-");
+                        //LogData(";                                          -----position-----   ------position------ - angle   ---Weather--  ---Weather--  -Current- -Current-   -Current Temp  -");
+                        //LogData(";     irlDateTime  | gameTime  |sceneName |   x   |  y  |  z   |  x    |  y  |  z   | x  | y  |---- Set --- |--- Stage -- |-- Temp - -WindChill- -With WindChill-  triggerCode        ;comment");
 
+                        //LogData(";    irlDateTime   |   gameTime   |sceneName");
+                        //LogData(";         ↓        |       ↓      | ↓");
+                               //11/25/2025 08:17:08|179.1017456055|CanneryRegion|-357.67|31.81|-519.39|-357.67|33.56|-519.39|187.15|-22.70|LightFog_cannery|LightFog|-13.43|0.00|-13.43|D
+
+                        //LogData(";         \u2193   |     \u2193 |   \u2193");
+
+
+                        // LogData(";");
+
+                        LogData("; Fields are separated by the \"|\" character:");
+                        LogData(";   irlDateTime: Real-world date and time when the data was recorded (MM/DD/YYYY HH:MM:SS)");
+                        LogData(";   gameTime: In-game hours played (float)");
+                        LogData(";   sceneName: Current game scene name");
+                        LogData(";   playerPosition (x, y, z): Player's position coordinates in the game world");
+                        LogData(";   cameraPosition (x, y, z): Camera's position coordinates in the game world");
+                        LogData(";   cameraAngleElevation (x, y): Camera's angle and elevation");
+                        LogData(";   weatherSet: Current weather setting");
+                        LogData(";   weatherCurrentTemperature: Current temperature in the game world");
+                        LogData(";   weatherCurrentWindchill: Current wind chill in the game world");
+                        LogData(";   weatherCurrentTemperatureWithWindchill: Current temperature with wind chill factored in");
+                        LogData(";   triggerCode: Code indicating what triggered the data capture (T=Time, D=Distance, K=Keypress)");
                         LogData(";");
                     }
 
 
                     LogData(irlDateTime +
-                        $"|" + gameTime +
-                        $"|" + Scene.SceneManager.GetActiveScene().name +
+                        $"|{gameTime:F10}" +
+                        $"|{sceneName,-3}" +
                         $"|{playerPos.x:F2}|{playerPos.y:F2}|{playerPos.z:F2}" +
                         $"|{cameraPosition.x:F2}|{cameraPosition.y:F2}|{cameraPosition.z:F2}" +
                         $"|{cameraAngleElevation.x:F2}|{cameraAngleElevation.y:F2}" +
-                        $"|{ws,2}" +
+                        $"|{weatherSetValueText}" +
+                        // $"|{weatherStage,2}" +
+                        // $"|{weatherDebugText}" +
                         // $"|{weatherStageName}" +
-                        $"|{wct:F2}" +
-                        $"|{wcwc:F2}" +
-                        $"|{wctwwc:F2}" +
+                        $"|{weatherCurrentTemperature:F2}" +
+                        $"|{weatherCurrentWindchill:F2}" +
+                        $"|{weatherCurrentTemperatureWithWindchill:F2}" +
                         $"|{triggerCode}");
 
 
@@ -334,6 +403,57 @@ namespace Telemetry
             }
 
             return 0.0f;
+        }
+
+        // Helper methods to split the multi-line Weather Debug Text string and pick lines by index or by prefix, then extract text after a separator.
+        // Example usage (inside OnUpdate)
+        // string wdt = Weather.GetDebugWeatherText();
+
+        // Get the 5th line (zero-based)
+        // string? fifthLine = GetLineAt(wdt, 4);
+
+        // Get the line that starts with "Wind Actual Speed"
+        // string? windLine = GetLineStartingWith(wdt, "Wind Actual Speed");
+
+        // Get the value after the colon for that line
+        // string? windValueText = GetTextAfterSeparator(windLine);
+
+        // If you need a numeric part, use a regex (fully-qualified to avoid extra using)
+        // var match = System.Text.RegularExpressions.Regex.Match(windLine ?? "", @"Wind Actual Speed:\s*([\d\.]+)");
+        // if (match.Success && float.TryParse(match.Groups[1].Value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float windSpeed))
+        // {
+        //   windSpeed parsed
+        // }
+
+        private static string? GetLineAt(string multiLine, int index)
+        {
+            if (string.IsNullOrEmpty(multiLine)) return null;
+            var lines = multiLine.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
+            if (index < 0 || index >= lines.Length) return null;
+            return lines[index].Trim();
+        }
+
+        private static string? GetLineStartingWith(string multiLine, string prefix, StringComparison comparison = StringComparison.OrdinalIgnoreCase)
+        {
+            if (string.IsNullOrEmpty(multiLine) || prefix is null) return null;
+            var lines = multiLine.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
+            return lines.Select(l => l.Trim()).FirstOrDefault(l => l.StartsWith(prefix, comparison));
+        }
+
+        private static string? GetTextAfterSeparator(string line, char separator = ':')
+        {
+            if (string.IsNullOrEmpty(line)) return null;
+            int ix = line.IndexOf(separator);
+            if (ix < 0) return null;
+            return line[(ix + 1)..].Trim();
+        }
+
+        private static string? GetTextBeforeSeparator(string line, char separator = '.')
+        {
+            if (string.IsNullOrEmpty(line)) return null;
+            int ix = line.IndexOf(separator);
+            if (ix < 0) return null;
+            return line.Substring(0, ix).Trim();
         }
     }
 }

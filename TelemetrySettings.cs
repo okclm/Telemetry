@@ -13,7 +13,8 @@ namespace Telemetry
 {
     internal class TelemetrySettings : JsonModSettings
     {     
-		[Section("General (Version 1.1) - 11/23/2025")]
+		// [Section("General (Version 1.1) - 11/25/2025")]
+		[Section("General (" + TelemetryMain.MOD_VERSION_NUMBER + ")")]
 
         [Name("Enable telemetry data capture")]
         [Description("Enable/Disable telemetry data capture")]
@@ -78,6 +79,10 @@ namespace Telemetry
 
             // Reset the odometer.  Set the previous position to the player current position
             TelemetryMain.previousPosition = GameManager.GetVpFPSPlayer().transform.position;
+
+            // Reset the wait timer to (near) zero.  Subtracting the waitTime is more accurate over time than resetting to zero.
+            TelemetryMain.timer = TelemetryMain.timer - Settings.waitTime;
+
         }
     }
 
