@@ -15,9 +15,9 @@ It collects various telemetry data while playing for use outside of the game. Th
 - cameraPosition (x, y, z): Camera's position coordinates in the game world
 - cameraAngleElevation (x, y): Camera's angle and elevation
 - weatherSet: Current weather set
-- weatherCurrentTemperature: Current temperature in the game world
-- weatherCurrentWindchill: Current wind chill in the game world
-- weatherCurrentTemperatureWithWindchill: Current temperature with wind chill factored in
+- weatherCurrentTemperatureWithoutHeatSources: Current temperature (C) without heat sources in the game world
+- weatherCurrentWindchill: Current wind chill temperature (C) in the game world
+- weatherCurrentTemperatureWithWindchill: Current temperature (C) with wind chill factored in
 - triggerCode: Code indicating what triggered the data capture (T=Time, D=Distance, K=Keypress)
 
 Data is captured periodically based on various triggers:
