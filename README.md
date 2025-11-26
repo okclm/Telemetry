@@ -26,8 +26,8 @@ Data is captured periodically based on various triggers:
 - When the player presses a specific key (Numeric keypad zero by default)
 
 The telemtry data is saved to a text file located in the mod's directory within the game's Mods folder.
-The filename is formatted as the name of the current game save followed by "_Telemetry.log".
-For example, if the name of the current game save is "FAR TERRITORY", the telemetry data will be saved in "FAR TERRITORY_Telemetry.log"
+The filename is formatted as the name of the current game save followed by "_Telemetry.log".  Any illegal characters in the save name are replaced with underscores.
+For example, if the name of the current game save is "FAR TERRITORY", the telemetry data will be saved in "FAR_TERRITORY_Telemetry.log"
 
 ### Options
 
