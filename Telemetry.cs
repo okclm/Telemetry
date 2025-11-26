@@ -266,8 +266,9 @@ namespace Telemetry
 
                     float weatherCurrentTemperature = weatherComponent.GetCurrentTemperature();
                     float weatherCurrentTemperatureWithoutHeatSources = weatherComponent.GetCurrentTemperatureWithoutHeatSources();
-                    float weatherCurrentTemperatureWithWindchill = weatherComponent.GetCurrentTemperatureWithWindchill();
                     float weatherCurrentWindchill = weatherComponent.GetCurrentWindchill();
+                    // float weatherCurrentTemperatureWithWindchill = weatherComponent.GetCurrentTemperatureWithWindchill();  // Nope. This includes heat sources.
+                    float weatherCurrentTemperatureWithWindchill = weatherCurrentTemperatureWithoutHeatSources + weatherCurrentWindchill;  // Calculate this to avoid the heat sources being included.
 
                     // Various ways to get the current save name and game id
                     //string currentSaveName = SaveGameSystem.GetCurrentSaveName();   // Example: "sandbox27"
@@ -353,9 +354,9 @@ namespace Telemetry
                         LogData(";   cameraAngleElevation (x, y): Camera's angle and elevation");
                         LogData(";   weatherSet: Current weather set");
                         //LogData(";   weatherCurrentTemperature: Current temperature in the game world");
-                        LogData(";   weatherCurrentTemperatureWithoutHeatSources: Current temperature without any heat sources in the game world");
-                        LogData(";   weatherCurrentWindchill: Current wind chill in the game world");
-                        LogData(";   weatherCurrentTemperatureWithWindchill: Current temperature with wind chill factored in");
+                        LogData(";   weatherCurrentTemperatureWithoutHeatSources: Current temperature (C) without any heat sources in the game world");
+                        LogData(";   weatherCurrentWindchill: Current wind chill temperature (C) in the game world");
+                        LogData(";   weatherCurrentTemperatureWithWindchill: Current temperature (C) with wind chill factored in");
                         LogData(";   triggerCode: Code indicating what triggered the data capture (T=Time, D=Distance, K=Keypress)");
                         LogData(";");
                     }
