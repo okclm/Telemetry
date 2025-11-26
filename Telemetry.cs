@@ -346,7 +346,7 @@ namespace Telemetry
                         LogData(";   playerPosition (x, y, z): Player's position coordinates in the game world");
                         LogData(";   cameraPosition (x, y, z): Camera's position coordinates in the game world");
                         LogData(";   cameraAngleElevation (x, y): Camera's angle and elevation");
-                        LogData(";   weatherSet: Current weather setting");
+                        LogData(";   weatherSet: Current weather set");
                         LogData(";   weatherCurrentTemperature: Current temperature in the game world");
                         LogData(";   weatherCurrentWindchill: Current wind chill in the game world");
                         LogData(";   weatherCurrentTemperatureWithWindchill: Current temperature with wind chill factored in");

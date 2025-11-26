@@ -1,22 +1,42 @@
 # Telemetry
 
-This project is a MelonLoader-based mod for The Long Dark game.
-It collects various telemetry data while playing for use outside of the game. 
-The collected data includes:
-	irl Date Time     
-	Game Time     
-	Scene Name
-	Player position (x, y, x)
-	Camera position (x, y, x)
-	Camera angle (x, y)
-	Current weather stage (DenseFog, LightSnow, HeavySnow, PartlyCloudy, Clear, Cloudy, LightFog, Blizzard, ClearAurora, ToxicFog, ElectrostaticFog)
-	Current weather temperature without wind chill
-	Current weather wind chill
-	Current weather temperature with wind chill
+### What is it?
 
-# Requires
+This project is a MelonLoader-based mod for [The Long Dark](https://www.thelongdark.com).
+A video game developed by [Hinterland Games](https://hinterlandgames.com/).
 
-# ChangeLog
+### Features
 
-v1.1.0
-- Added weather data collection
+It collects various telemetry data while playing for use outside of the game. The collected data includes:
+- irlDateTime: Real-world date and time when the data was recorded (MM/DD/YYYY HH:MM:SS)
+- gameTime: In-game hours played (float)
+- sceneName: Current game scene name
+- playerPosition (x, y, z): Player's position coordinates in the game world
+- cameraPosition (x, y, z): Camera's position coordinates in the game world
+- cameraAngleElevation (x, y): Camera's angle and elevation
+- weatherSet: Current weather set
+- weatherCurrentTemperature: Current temperature in the game world
+- weatherCurrentWindchill: Current wind chill in the game world
+- weatherCurrentTemperatureWithWindchill: Current temperature with wind chill factored in
+- triggerCode: Code indicating what triggered the data capture (T=Time, D=Distance, K=Keypress)
+
+Data is captured periodically based on various triggers:
+- At regular game time intervals (every 60 seconds by default)
+- When the player moves a certain distance (10 meters by default)
+- When the player presses a specific key (Numeric keypad zero by default)
+
+The telemtry data is saved to a text file located in the mod's directory within the game's Mods folder.
+The filename is formatted as the name of the current game save followed by "_Telemetry.log".
+For example, if the name of the current game save is "FAR TERRITORY", the telemetry data will be saved in "FAR TERRITORY_Telemetry.log"
+
+### Options
+
+The mod includes configurable options that can be adjusted through a settings menu in-game.
+<img width="1920" height="1080" alt="image" src="Options Screenshot.png" />
+
+### Installation
+
+<!-- >- **Install** [[ModSettings](https://github.com/DigitalzombieTLD/ModSettings/releases/tag/v2.0)] **and it's dependencies.** -->
+- **Install** [[ModSettings](https://github.com/DigitalzombieTLD/ModSettings/releases/latest)] **and it's dependencies.**
+- **Drop the** **.dll** **file into your mods folder**.
+- **Enjoy**!
