@@ -58,7 +58,7 @@ namespace Telemetry
         // Are we in the game menu?
         public static bool inMenu = true;
 
-        public const string MOD_VERSION_NUMBER = "Version 1.1 - 11/25/2025";    // The version # of the mod.
+        public const string MOD_VERSION_NUMBER = "Version 1.1 - 11/26/2025";    // The version # of the mod.
         //internal const string LOG_FILE_FORMAT_VERSION_NUMBER = "1.0";           // The version # of the log file format.  This is used to determine if the log file format has changed and we need to update the code to read it.
         internal const string DEFAULT_FILE_NAME = "Telemetry.log";                // The log file is written in the MODS folder for TLD  (i.e. D:\Program Files (x86)\Steam\steamapps\common\TheLongDark\Mods)
         internal const string FILE_NAME_DESMOS2D = "Telemetry_Desmos2D.log";      // The log file is written in the MODS folder for TLD  (i.e. D:\Program Files (x86)\Steam\steamapps\common\TheLongDark\Mods)
@@ -240,7 +240,7 @@ namespace Telemetry
                     WeatherStage weatherStage = weatherComponent.GetWeatherStage();
                     string weatherStageName = weatherComponent.GetWeatherStageDisplayName(weatherStage);
 
-                    // ** Example weather debug text (wdt).  Note it is multi-line and verbose.: **
+                    // ** Example weather debug text (weatherDebugText).  Note it is multi-line and verbose.: **
                     // Morning To Midday (51.59%)
                     // Weather Set: LightFog_cannery. 4.27hrs. (61.6 %)
                     // 00 >> LightFog.tr: 100.0 %. 2.63 / 4.27hrs
@@ -255,12 +255,17 @@ namespace Telemetry
                     // Aurora alpha: 0
                     // Time Since Last Blizzard(4): 24.09688 
 
+                    // Let's talk "stats"...
+                    // StatsManager statsManager = GameManager.GetStatsManager();
+
+
                     string weatherDebugText = Weather.GetDebugWeatherText();
                     string? weatherSetLine = GetLineStartingWith(weatherDebugText, "Weather Set");
                     string? weatherSetValueText = GetTextAfterSeparator(weatherSetLine, ':');
                     weatherSetValueText = GetTextBeforeSeparator(weatherSetValueText, '.');
 
                     float weatherCurrentTemperature = weatherComponent.GetCurrentTemperature();
+                    float weatherCurrentTemperatureWithoutHeatSources = weatherComponent.GetCurrentTemperatureWithoutHeatSources();
                     float weatherCurrentTemperatureWithWindchill = weatherComponent.GetCurrentTemperatureWithWindchill();
                     float weatherCurrentWindchill = weatherComponent.GetCurrentWindchill();
 
@@ -347,7 +352,8 @@ namespace Telemetry
                         LogData(";   cameraPosition (x, y, z): Camera's position coordinates in the game world");
                         LogData(";   cameraAngleElevation (x, y): Camera's angle and elevation");
                         LogData(";   weatherSet: Current weather set");
-                        LogData(";   weatherCurrentTemperature: Current temperature in the game world");
+                        //LogData(";   weatherCurrentTemperature: Current temperature in the game world");
+                        LogData(";   weatherCurrentTemperatureWithoutHeatSources: Current temperature without any heat sources in the game world");
                         LogData(";   weatherCurrentWindchill: Current wind chill in the game world");
                         LogData(";   weatherCurrentTemperatureWithWindchill: Current temperature with wind chill factored in");
                         LogData(";   triggerCode: Code indicating what triggered the data capture (T=Time, D=Distance, K=Keypress)");
@@ -365,7 +371,8 @@ namespace Telemetry
                         // $"|{weatherStage,2}" +
                         // $"|{weatherDebugText}" +
                         // $"|{weatherStageName}" +
-                        $"|{weatherCurrentTemperature:F2}" +
+                        //$"|{weatherCurrentTemperature:F2}" +
+                        $"|{weatherCurrentTemperatureWithoutHeatSources:F2}" +
                         $"|{weatherCurrentWindchill:F2}" +
                         $"|{weatherCurrentTemperatureWithWindchill:F2}" +
                         $"|{triggerCode}");
