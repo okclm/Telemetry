@@ -22,13 +22,13 @@ It collects various telemetry data while playing for use outside of the game. Th
 - triggerCode: Code indicating what triggered the data capture (T=Time, D=Distance, K=Keypress, W=Weather Change)
 
 Data is captured periodically based on various triggers:
-- At regular game time intervals (every 60 seconds by default)
-- When the player moves a certain distance (10 meters by default)
 - When the player presses a specific key (Numeric keypad zero by default)
-- When there is a change in weather conditions (Weather Set or Stage)
+- At regular game time intervals in seconds (optional)
+- When the player moves a certain distance in meters (optional)
+- When there is a change in the current weather set or stage (optional)
 
 The telemtry data is saved to a text file located in the mod's directory within the game's Mods folder.
-The filename is formatted as the name of the current game save followed by "_Telemetry.log".  Any illegal characters in the save name are replaced with underscores.
+The filename is formatted as the name of the current game save followed by "_Telemetry.log".  Any illegal or blank characters in the save name are replaced with underscores.
 For example, if the name of the current game save is "FAR TERRITORY", the telemetry data will be saved in "FAR_TERRITORY_Telemetry.log"
 
 ### Options
