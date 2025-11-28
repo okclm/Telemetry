@@ -15,15 +15,17 @@ It collects various telemetry data while playing for use outside of the game. Th
 - cameraPosition (x, y, z): Camera's position coordinates in the game world
 - cameraAngleElevation (x, y): Camera's angle and elevation
 - weatherSet: Current weather set
+- weatherStage: Current weather stage
 - weatherCurrentTemperatureWithoutHeatSources: Current temperature (C) without heat sources in the game world
 - weatherCurrentWindchill: Current wind chill temperature (C) in the game world
 - weatherCurrentTemperatureWithWindchill: Current temperature (C) with wind chill factored in
-- triggerCode: Code indicating what triggered the data capture (T=Time, D=Distance, K=Keypress)
+- triggerCode: Code indicating what triggered the data capture (T=Time, D=Distance, K=Keypress, W=Weather Change)
 
 Data is captured periodically based on various triggers:
 - At regular game time intervals (every 60 seconds by default)
 - When the player moves a certain distance (10 meters by default)
 - When the player presses a specific key (Numeric keypad zero by default)
+- When there is a change in weather conditions (Weather Set or Stage)
 
 The telemtry data is saved to a text file located in the mod's directory within the game's Mods folder.
 The filename is formatted as the name of the current game save followed by "_Telemetry.log".  Any illegal characters in the save name are replaced with underscores.
