@@ -7,11 +7,14 @@ using MelonLoader;
 using MelonLoader.Utils;
 using System.Collections;
 using System.Reflection;
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Xml.Linq;
 using UnityEngine;
 using static Il2CppSystem.Net.ServicePointManager;
 using Scene = UnityEngine.SceneManagement;
+using HarmonyLib;
+using Il2CppTLD.Logging;
 
 /*
  * Stuff you need to know:
@@ -48,6 +51,11 @@ namespace Telemetry
 {
     public class TelemetryMain : MelonMod
     {
+        private const string HARMONY_ID = "OKCLM.tld.weathersethook";     // Used in Harmony instance creation.
+        //private static WeatherStage lastStage = WeatherStage.Clear;     // Keep track of last weather stage seen.
+        private static WeatherStage lastStage = WeatherStage.Undefined;   // Keep track of last weather stage seen.
+        public static bool weatherStageChanged = false;                 // Has the weather stage changed since last check? 
+
         // *** Stuff for capturing telemtry data every waitTime seconds ***
         // private float waitTime = 10.0f; // This is a parameter controlled in the options menu.
         public static float timer = 0.0f;
@@ -58,7 +66,7 @@ namespace Telemetry
         // Are we in the game menu?
         public static bool inMenu = true;
 
-        public const string MOD_VERSION_NUMBER = "Version 1.1 - 11/26/2025";    // The version # of the mod.
+        public const string MOD_VERSION_NUMBER = "Version 1.1 - 11/28/2025";      // The version # of the mod.
         //internal const string LOG_FILE_FORMAT_VERSION_NUMBER = "1.0";           // The version # of the log file format.  This is used to determine if the log file format has changed and we need to update the code to read it.
         internal const string DEFAULT_FILE_NAME = "Telemetry.log";                // The log file is written in the MODS folder for TLD  (i.e. D:\Program Files (x86)\Steam\steamapps\common\TheLongDark\Mods)
         internal const string FILE_NAME_DESMOS2D = "Telemetry_Desmos2D.log";      // The log file is written in the MODS folder for TLD  (i.e. D:\Program Files (x86)\Steam\steamapps\common\TheLongDark\Mods)
@@ -94,13 +102,28 @@ namespace Telemetry
 
         // alsoGenerateDesmosData
 
-        public void LogMessage(string message, [CallerLineNumber] int lineNumber = 0, [CallerMemberName] string? caller = null)
+        public static void LogMessage(string message, [CallerLineNumber] int lineNumber = 0, [CallerMemberName] string? caller = null)
         {
             // *** This if DEBUG statement will enable all LogMessage text going to the MelonLoader logger.
             // *** Otherwise, we just log to the Telemetry log file.
             #if DEBUG
-                LoggerInstance.Msg("." + caller + "." + lineNumber + ": " + message);
+                // Use static MelonLogger so this method can be called from static contexts (Harmony hooks, etc.)
+                MelonLogger.Msg("." + caller + "." + lineNumber + ": " + message);
+            #else
+                // In release, write lightweight telemetry to file so logs are still available without requiring Melon instance.
+                try
+                {
+                    LogData(";" + caller + "." + lineNumber + ": " + message);
+                }
+                catch
+                {
+                    // swallow — don't let logging break the game
+                }
             #endif
+
+            //#if DEBUG
+            //    LoggerInstance.Msg("." + caller + "." + lineNumber + ": " + message);
+            //#endif
         }
 
         public static string SanitizeFileName(string filename)
@@ -116,7 +139,29 @@ namespace Telemetry
 
         public override void OnInitializeMelon()
         {
+            // Debug break: in DEBUG builds this will prompt to attach a debugger (Launch) then break.
+            // Replace or remove the #if block if you want this in release.
+
+            //#if DEBUG
+            //            if (!Debugger.IsAttached)
+            //            {
+            //                Debugger.Launch(); // prompts to attach a debugger
+            //            }
+            //            else
+            //            {
+            //                Debugger.Break(); // break into already attached debugger
+            //            }
+            //#endif
+
             LogMessage("Initializing Melon.");
+
+            var harmony = new HarmonyLib.Harmony(HARMONY_ID);
+            LogMessage("Using AccessTools for Weather.Update() hook...");
+            harmony.Patch(
+                AccessTools.Method(typeof(Weather), "Update"),
+                prefix: new HarmonyMethod(typeof(TelemetryMain), nameof(OnWeatherUpdate))
+            );
+
             // LogMessage($"[" + Scene.SceneManager.GetActiveScene().name + $" / distanceThreshold={Settings.distanceThreshold:F2}]");
             // LogMessage($"[" + Scene.SceneManager.GetActiveScene().name + $" / Settings.enableTelemetryDataCapture={Settings.enableTelemetryDataCapture}]");
 
@@ -140,13 +185,6 @@ namespace Telemetry
         {
             // LogMessage($"[" + Scene.SceneManager.GetActiveScene().name + $" / Enter OnSceneWasLoaded. Settings.enableTelemetryDataCapture={Settings.enableTelemetryDataCapture}]");
             
-            // Reset the odometer on a scene change.  Player distance travelled in the new scene is zero.
-            if (GameManager.GetVpFPSPlayer())
-            {
-                previousPosition = GameManager.GetVpFPSPlayer().transform.position;
-                LogMessage($"[" + Scene.SceneManager.GetActiveScene().name + $" / Enter OnSceneWasLoaded. Resetting previousPosition to {previousPosition}]");
-            }
-
             if (sceneName.Contains("MainMenu"))
             {
                 //SCRIPT_InterfaceManager/_GUI_Common/Camera/Anchor/Panel_OptionsMenu/Pages/ModSettings/GameObject/ScrollPanel/Offset/
@@ -154,10 +192,21 @@ namespace Telemetry
                 inMenu = true;
                 LogMessage("Menu Scene " + sceneName + " was loaded.");
             }
-            else if (sceneName.Contains("SANDBOX"))
+            else if (!sceneName.Contains("_SANDBOX_") && (sceneName.Contains("_SANDBOX")))
             {
                 inMenu = false;
                 LogMessage("Sandbox Scene " + sceneName + " was loaded.");
+
+                if (GameManager.GetVpFPSPlayer())
+                {
+                    // Reset trigger counters on a scene change...
+                    LogMessage($"[" + Scene.SceneManager.GetActiveScene().name + $"] / Enter OnSceneWasLoaded. Resetting telemetry data capture triggers.");
+
+                    previousPosition = GameManager.GetVpFPSPlayer().transform.position; // Player current position
+                    lastStage = WeatherStage.Undefined; // Reset last weather stage seen.
+                    timer = timer - Settings.waitTime;  // Reset timer to (near) zero.
+                }
+
                 // HUDMessage.AddMessage("Sandbox Scene " + sceneName + " was loaded.",false,true);
             }
             else
@@ -178,6 +227,8 @@ namespace Telemetry
             // Only the telemetry data lines do not start with a semi-colon.
 
             timer += Time.deltaTime;
+
+            // LogMessage("OnUpdate called...");    // Warning: Verbose logging!
 
             // if (GameManager.GetVpFPSPlayer() && (timer > waitTime))
 
@@ -212,12 +263,16 @@ namespace Telemetry
                 // Have we moved far enough to do something?
                 // Or, did the user press the capture telemetry key?
                 // Or did the waitTime elapse?
-                if ((Settings.enableTelemetryTimeDataCapture && (timer > Settings.waitTime)) || (Settings.enableTelemetryDistanceDataCapture && (howFar > Settings.distanceThreshold)) || InputManager.GetKeyDown(InputManager.m_CurrentContext, Settings.options.captureKey))
+                if ((Settings.enableTelemetryTimeDataCapture && (timer > Settings.waitTime)) || 
+                    (Settings.enableTelemetryDistanceDataCapture && (howFar > Settings.distanceThreshold)) ||
+                    (Settings.enableTelemetryWeatherChangeDataCapture && (weatherStageChanged == true)) ||
+                    InputManager.GetKeyDown(InputManager.m_CurrentContext, Settings.options.captureKey))
                 {
                     // Are we here because the distance threshold was met or because the user pressed the capture key?
                     string triggerCode = "K";   // Default is we are here because of a keypress.
                     if (howFar > Settings.distanceThreshold) { triggerCode = "D"; }  // We are here because the distance threshold was exceeded.
                     if (timer > Settings.waitTime) { triggerCode = "T"; }            // We are here because the waittime threshold was exceeded.
+                    if (weatherStageChanged == true) { triggerCode = "W"; }          // We are here because the weather stage changed.
 
                     // Deterine IRL time.  We use this to timestamp the data with the current IRL time.
                     string irlDateTime = DateTime.Now.ToString("MM/dd/yyyy HH:mm:ss");
@@ -297,15 +352,15 @@ namespace Telemetry
                     //LogMessage($";[" + Scene.SceneManager.GetActiveScene().name + $" / currentSaveName={currentSaveName}");
                     //LogMessage($";[" + Scene.SceneManager.GetActiveScene().name + $" / csn={csn}");
                     //LogMessage($";[" + Scene.SceneManager.GetActiveScene().name + $" / cgi={cgi.ToString()}");
-                    LogMessage($";[" + Scene.SceneManager.GetActiveScene().name + $" / ssUDF={ssUDF}");
-                    LogMessage($";[" + Scene.SceneManager.GetActiveScene().name + $" / triggerCode={triggerCode}");
-                    LogMessage($";[" + Scene.SceneManager.GetActiveScene().name + $" / cameraPosition={cameraPosition.ToString("F1")}");
-                    LogMessage($";[" + Scene.SceneManager.GetActiveScene().name + $" / cameraAngleElevation={cameraAngleElevation.ToString("F1")}");
-                    LogMessage($";[" + Scene.SceneManager.GetActiveScene().name + $" / distanceThreshold={Settings.distanceThreshold:F2}");
-                    LogMessage($";[" + Scene.SceneManager.GetActiveScene().name + $" / howFar={howFar:F2}");
+                    //LogMessage($";[" + Scene.SceneManager.GetActiveScene().name + $" / ssUDF={ssUDF}");
+                    //LogMessage($";[" + Scene.SceneManager.GetActiveScene().name + $" / triggerCode={triggerCode}");
+                    //LogMessage($";[" + Scene.SceneManager.GetActiveScene().name + $" / cameraPosition={cameraPosition.ToString("F1")}");
+                    //LogMessage($";[" + Scene.SceneManager.GetActiveScene().name + $" / cameraAngleElevation={cameraAngleElevation.ToString("F1")}");
+                    //LogMessage($";[" + Scene.SceneManager.GetActiveScene().name + $" / distanceThreshold={Settings.distanceThreshold:F2}");
+                    //LogMessage($";[" + Scene.SceneManager.GetActiveScene().name + $" / howFar={howFar:F2}");
                     // LogMessage($";[" + Scene.SceneManager.GetActiveScene().name + $" *** Travelled farther than distance threshold! ***");
-                    LogMessage($";[" + Scene.SceneManager.GetActiveScene().name + $" / PlayerPosition.X={playerPos.x:F2} / PlayerPosition.Y={playerPos.y:F2} / PlayerPosition.Z={playerPos.z:F2}]");
-                    LogMessage($";[" + Scene.SceneManager.GetActiveScene().name + $" / previousPosition.X={previousPosition.x:F2} / previousPosition.Y={previousPosition.y:F2} / previousPosition.Z={previousPosition.z:F2}]");
+                    //LogMessage($";[" + Scene.SceneManager.GetActiveScene().name + $" / PlayerPosition.X={playerPos.x:F2} / PlayerPosition.Y={playerPos.y:F2} / PlayerPosition.Z={playerPos.z:F2}]");
+                    //LogMessage($";[" + Scene.SceneManager.GetActiveScene().name + $" / previousPosition.X={previousPosition.x:F2} / previousPosition.Y={previousPosition.y:F2} / previousPosition.Z={previousPosition.z:F2}]");
                     // LogMessage($"; GameManager.GetTimeOfDayComponent().GetTODHours(Time.deltaTime)=" + GameManager.GetTimeOfDayComponent().GetTODHours(Time.deltaTime));
                     // LogMessage($"; GameManager.GetTimeOfDayComponent().FormatTime(GameManager.GetTimeOfDayComponent().GetHour(), GameManager.GetTimeOfDayComponent().GetMinutes())=" + GameManager.GetTimeOfDayComponent().FormatTime(GameManager.GetTimeOfDayComponent().GetHour(), GameManager.GetTimeOfDayComponent().GetMinutes()));
                     // LogMessage($"; GameManager.GetTimeOfDayComponent().GetHoursPlayedNotPaused()=" + GameManager.GetTimeOfDayComponent().GetHoursPlayedNotPaused());
@@ -353,11 +408,13 @@ namespace Telemetry
                         LogData(";   cameraPosition (x, y, z): Camera's position coordinates in the game world");
                         LogData(";   cameraAngleElevation (x, y): Camera's angle and elevation");
                         LogData(";   weatherSet: Current weather set");
+                        LogData(";   weatherStage: Current weather stage");
+                        //LogData(";   weatherStageName: Current weather stage name");
                         //LogData(";   weatherCurrentTemperature: Current temperature in the game world");
                         LogData(";   weatherCurrentTemperatureWithoutHeatSources: Current temperature (C) without any heat sources in the game world");
                         LogData(";   weatherCurrentWindchill: Current wind chill temperature (C) in the game world");
                         LogData(";   weatherCurrentTemperatureWithWindchill: Current temperature (C) with wind chill factored in");
-                        LogData(";   triggerCode: Code indicating what triggered the data capture (T=Time, D=Distance, K=Keypress)");
+                        LogData(";   triggerCode: Code indicating what triggered the data capture (T=Time, D=Distance, K=Keypress, W=Weather change)");
                         LogData(";");
                     }
 
@@ -369,9 +426,9 @@ namespace Telemetry
                         $"|{cameraPosition.x:F2}|{cameraPosition.y:F2}|{cameraPosition.z:F2}" +
                         $"|{cameraAngleElevation.x:F2}|{cameraAngleElevation.y:F2}" +
                         $"|{weatherSetValueText}" +
-                        // $"|{weatherStage,2}" +
+                        $"|{weatherStage,2}" +
                         // $"|{weatherDebugText}" +
-                        // $"|{weatherStageName}" +
+                        //$"|{weatherStageName}" +
                         //$"|{weatherCurrentTemperature:F2}" +
                         $"|{weatherCurrentTemperatureWithoutHeatSources:F2}" +
                         $"|{weatherCurrentWindchill:F2}" +
@@ -394,6 +451,9 @@ namespace Telemetry
 
                     // Reset the wait timer to (near) zero.  Subtracting the waitTime is more accurate over time than resetting to zero.
                     timer = timer - Settings.waitTime;
+
+                    // Reset the weather stage changed flag to false
+                    weatherStageChanged = false;
                 }
 
                 //SaveGameSystem.GetNewestSaveSlotForActiveGame();
@@ -463,5 +523,87 @@ namespace Telemetry
             if (ix < 0) return null;
             return line.Substring(0, ix).Trim();
         }
+
+        // Helper methods to track and log the current weather stage changes
+
+        // Runs every frame but only logs when the weather stage changes
+        private static bool OnWeatherUpdate(Weather __instance)
+        {
+            // LogMessage("Checking if Weather changed...");
+
+            WeatherStage current = __instance.GetWeatherStage();
+            if (!inMenu && (current != lastStage))
+            {
+                weatherStageChanged = true;
+                LogMessage($"Weather stage change detected.  Last stage=\"{lastStage}\", New stage=\"{current}\"");
+
+                lastStage = current;
+                LogCurrentWeather("Stage change");
+            }
+            return true;
+        }
+
+        // The Weather Stage logging method
+        private static void LogCurrentWeather(string source)
+        {
+            try
+            {
+                string debugText = Weather.GetDebugWeatherText();
+                string setName = "Unknown";
+
+                // Parse "Weather Set: Blizzard_ashcanyon. 8.21hrs."
+                int pos = 0;
+                while (pos < debugText.Length)
+                {
+                    int nextLine = debugText.IndexOf('\n', pos);
+                    if (nextLine == -1) nextLine = debugText.Length;
+
+                    string line = debugText.Substring(pos, nextLine - pos);
+                    if (line.Contains("Weather Set"))
+                    {
+                        int colon = line.IndexOf(':');
+                        if (colon >= 0)
+                        {
+                            string rest = line.Substring(colon + 1).Trim();
+                            int dot = rest.IndexOf('.');
+                            setName = dot > 0 ? rest.Substring(0, dot).Trim() : rest.Trim();
+                        }
+                        break;
+                    }
+                    pos = nextLine + 1;
+                }
+
+                var w = GameManager.GetWeatherComponent();
+                string stage = w.GetWeatherStageDisplayName(w.GetWeatherStage());
+                float feelsLike = w.GetCurrentTemperatureWithoutHeatSources() + w.GetCurrentWindchill();
+                float day = GameManager.GetTimeOfDayComponent().GetHoursPlayedNotPaused();
+
+                //MelonLogger.Msg($"[WEATHER CHANGE - {source}] {DateTime.Now:HH:mm:ss} | Day {day:F1} | {GameManager.m_ActiveScene}");
+                //MelonLogger.Msg($"   → {setName} ({stage}) → Feels like {feelsLike:F1}°C");
+
+                LogMessage($"[WEATHER CHANGE - {source}] {DateTime.Now:HH:mm:ss} | Day {day:F1} | {GameManager.m_ActiveScene}");
+                LogMessage($"   → {setName} ({stage}) → Feels like {feelsLike:F1}°C");
+
+                if (Settings.enableTelemetryWeatherChangeHUDDisplay)
+                {
+                    HUDMessage.AddMessage($"Weather → {setName} ({stage}) → Feels like {feelsLike:F1}°C", 5f, true);
+                }
+            }
+            catch (Exception e)
+            {
+                //MelonLogger.Error("Weather hook error: " + e.Message);
+                LogMessage("LogCurrentWeather hook error: " + e.Message);
+            }
+        }
+
+        // Clean up Harmony Weather patches on mod unload
+        public override void OnDeinitializeMelon()
+        {
+            HarmonyLib.Harmony.UnpatchID(HARMONY_ID);
+            //MelonLogger.Msg("[LogCurrentWeather] Unloaded cleanly.");
+            LogMessage("[LogCurrentWeather] Unloaded cleanly.");
+        }
+
+
     }
 }

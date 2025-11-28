@@ -54,6 +54,14 @@ namespace Telemetry
         [Slider(60, 86400)]
         public int waitTime = 60;
 
+        [Name("Enable Weather change capture trigger")]
+        [Description("Enable/Disable Weather change data capture")]
+        public bool enableTelemetryWeatherChangeDataCapture = true;
+
+        [Name("Enable Weather change HUD display")]
+        [Description("Enable/Disable Weather change HUD display")]
+        public bool enableTelemetryWeatherChangeHUDDisplay = true;
+
         protected override void OnChange(FieldInfo field, object oldValue, object newValue)
         {
         }
@@ -70,6 +78,8 @@ namespace Telemetry
             Settings.alsoGenerateDesmos3DData = alsoGenerateDesmos3DData;
             Settings.enableTelemetryTimeDataCapture = enableTelemetryTimeDataCapture;
             Settings.enableTelemetryDistanceDataCapture = enableTelemetryDistanceDataCapture;
+            Settings.enableTelemetryWeatherChangeDataCapture = enableTelemetryWeatherChangeDataCapture;
+            Settings.enableTelemetryWeatherChangeHUDDisplay = enableTelemetryWeatherChangeHUDDisplay;
 
             /*
             TelemetryMain.distanceThreshold = distanceThreshold;
@@ -98,6 +108,8 @@ namespace Telemetry
         public static bool alsoGenerateDesmos3DData = true;
         public static bool enableTelemetryTimeDataCapture = true;
         public static bool enableTelemetryDistanceDataCapture = true;
+        public static bool enableTelemetryWeatherChangeDataCapture = true;
+        public static bool enableTelemetryWeatherChangeHUDDisplay = true;
 
         public static void OnLoad()
         {
@@ -113,6 +125,8 @@ namespace Telemetry
             alsoGenerateDesmos3DData = options.alsoGenerateDesmos3DData;
             enableTelemetryTimeDataCapture = options.enableTelemetryTimeDataCapture;
             enableTelemetryDistanceDataCapture = options.enableTelemetryDistanceDataCapture;
+            enableTelemetryWeatherChangeDataCapture = options.enableTelemetryWeatherChangeDataCapture;
+            enableTelemetryWeatherChangeHUDDisplay = options.enableTelemetryWeatherChangeHUDDisplay;
         }
     }
 }
