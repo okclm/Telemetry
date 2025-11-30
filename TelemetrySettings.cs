@@ -58,9 +58,14 @@ namespace Telemetry
         [Description("Enable/Disable Weather change data capture")]
         public bool enableTelemetryWeatherChangeDataCapture = true;
 
-        [Name("Enable Weather change HUD display")]
-        [Description("Enable/Disable Weather change HUD display")]
-        public bool enableTelemetryWeatherChangeHUDDisplay = true;
+        [Name("Enable HUD display messages")]
+        [Description("Enable/Disable Telemetry informational messages on HUD display")]
+        public bool enableTelemetryHUDDisplay = true;
+
+        [Name("Enable Wind change capture trigger")]
+        [Description("Enable/Disable Wind change data capture")]
+        public bool enableTelemetryWindStrengthChangeDataCapture = true;
+
 
         protected override void OnChange(FieldInfo field, object oldValue, object newValue)
         {
@@ -79,7 +84,8 @@ namespace Telemetry
             Settings.enableTelemetryTimeDataCapture = enableTelemetryTimeDataCapture;
             Settings.enableTelemetryDistanceDataCapture = enableTelemetryDistanceDataCapture;
             Settings.enableTelemetryWeatherChangeDataCapture = enableTelemetryWeatherChangeDataCapture;
-            Settings.enableTelemetryWeatherChangeHUDDisplay = enableTelemetryWeatherChangeHUDDisplay;
+            Settings.enableTelemetryHUDDisplay = enableTelemetryHUDDisplay;
+            Settings.enableTelemetryWindStrengthChangeDataCapture = enableTelemetryWindStrengthChangeDataCapture;
 
             /*
             TelemetryMain.distanceThreshold = distanceThreshold;
@@ -109,7 +115,8 @@ namespace Telemetry
         public static bool enableTelemetryTimeDataCapture = true;
         public static bool enableTelemetryDistanceDataCapture = true;
         public static bool enableTelemetryWeatherChangeDataCapture = true;
-        public static bool enableTelemetryWeatherChangeHUDDisplay = true;
+        public static bool enableTelemetryHUDDisplay = true;
+        public static bool enableTelemetryWindStrengthChangeDataCapture = true;
 
         public static void OnLoad()
         {
@@ -126,7 +133,8 @@ namespace Telemetry
             enableTelemetryTimeDataCapture = options.enableTelemetryTimeDataCapture;
             enableTelemetryDistanceDataCapture = options.enableTelemetryDistanceDataCapture;
             enableTelemetryWeatherChangeDataCapture = options.enableTelemetryWeatherChangeDataCapture;
-            enableTelemetryWeatherChangeHUDDisplay = options.enableTelemetryWeatherChangeHUDDisplay;
+            enableTelemetryHUDDisplay = options.enableTelemetryHUDDisplay;
+            enableTelemetryWindStrengthChangeDataCapture = options.enableTelemetryWindStrengthChangeDataCapture;
         }
     }
 }

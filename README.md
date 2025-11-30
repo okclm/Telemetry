@@ -16,18 +16,20 @@ It collects various telemetry data while playing for use outside of the game. Th
 - cameraAngleElevation (x, y): Camera's angle and elevation
 - weatherSet: Current weather set
 - weatherStage: Current weather stage
-- weatherCurrentTemperatureWithoutHeatSources: Current temperature (C) without heat sources in the game world
-- weatherCurrentWindchill: Current wind chill temperature (C) in the game world
+- windStrength: Current wind strength (Calm, SlightlyWindy, Windy, VeryWindy, Blizzard)
+- weatherCurrentTemperatureWithoutHeatSources: Current temperature (C) without heat sources
+- weatherCurrentWindchill: Current wind chill temperature (C)
 - weatherCurrentTemperatureWithWindchill: Current temperature (C) with wind chill factored in
-- triggerCode: Code indicating what triggered the data capture (T=Time, D=Distance, K=Keypress, W=Weather Change)
+- triggerCode: Code indicating what triggered the data capture (T=Time, D=Distance, K=Keypress, W=Weather Change, w=Wind Change)
 
 Data is captured periodically based on various triggers:
-- When the player presses a specific key (Numeric keypad zero by default)
-- At regular game time intervals in seconds (optional)
-- When the player moves a certain distance in meters (optional)
-- When there is a change in the current weather set or stage (optional)
+- When the player presses a specific key
+- At regular game time intervals in seconds
+- When the player moves a certain distance in meters
+- When there is a change in the current weather set or stage
+- When there is a change in the current wind strength
 
-The telemtry data is saved to a text file located in the mod's directory within the game's Mods folder.
+The telemtry data is saved to a text file located in the game's Mods folder.
 The filename is formatted as the name of the current game save followed by "_Telemetry.log".  Any illegal or blank characters in the save name are replaced with underscores.
 For example, if the name of the current game save is "FAR TERRITORY", the telemetry data will be saved in "FAR_TERRITORY_Telemetry.log"
 

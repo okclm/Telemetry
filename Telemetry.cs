@@ -51,10 +51,16 @@ namespace Telemetry
 {
     public class TelemetryMain : MelonMod
     {
-        private const string HARMONY_ID = "OKCLM.tld.weathersethook";     // Used in Harmony instance creation.
-        //private static WeatherStage lastStage = WeatherStage.Clear;     // Keep track of last weather stage seen.
-        private static WeatherStage lastStage = WeatherStage.Undefined;   // Keep track of last weather stage seen.
-        public static bool weatherStageChanged = false;                 // Has the weather stage changed since last check? 
+        // Weather tracking stuff
+        private const string HARMONY_ID_WEATHER = "OKCLM.tld.weathersethook";   // Used in Harmony instance creation.
+        private static WeatherStage lastStage = WeatherStage.Undefined;         // Keep track of last weather stage seen.
+        public static bool weatherStageChanged = false;                         // Has the weather stage changed since last check? 
+
+        // Wind tracking stuff
+        private const string HARMONY_ID_WIND = "OKCLM.tld.windsethook";         // Used in Harmony instance creation.
+        private static WindStrength? lastWindStrength = null;                   // Keep track of last wind strength seen.
+        private static float lastWindMPH = -1f;                                 // Keep track of last wind speed seen.
+        public static bool windStrengthChanged = false;                         // Has the wind strength changed since last check? 
 
         // *** Stuff for capturing telemtry data every waitTime seconds ***
         // private float waitTime = 10.0f; // This is a parameter controlled in the options menu.
@@ -66,7 +72,7 @@ namespace Telemetry
         // Are we in the game menu?
         public static bool inMenu = true;
 
-        public const string MOD_VERSION_NUMBER = "Version 1.1 - 11/28/2025";      // The version # of the mod.
+        public const string MOD_VERSION_NUMBER = "Version 1.1 - 11/30/2025";      // The version # of the mod.
         //internal const string LOG_FILE_FORMAT_VERSION_NUMBER = "1.0";           // The version # of the log file format.  This is used to determine if the log file format has changed and we need to update the code to read it.
         internal const string DEFAULT_FILE_NAME = "Telemetry.log";                // The log file is written in the MODS folder for TLD  (i.e. D:\Program Files (x86)\Steam\steamapps\common\TheLongDark\Mods)
         internal const string FILE_NAME_DESMOS2D = "Telemetry_Desmos2D.log";      // The log file is written in the MODS folder for TLD  (i.e. D:\Program Files (x86)\Steam\steamapps\common\TheLongDark\Mods)
@@ -155,11 +161,18 @@ namespace Telemetry
 
             LogMessage("Initializing Melon.");
 
-            var harmony = new HarmonyLib.Harmony(HARMONY_ID);
+            var harmonyWeather = new HarmonyLib.Harmony(HARMONY_ID_WEATHER);
             LogMessage("Using AccessTools for Weather.Update() hook...");
-            harmony.Patch(
+            harmonyWeather.Patch(
                 AccessTools.Method(typeof(Weather), "Update"),
                 prefix: new HarmonyMethod(typeof(TelemetryMain), nameof(OnWeatherUpdate))
+            );
+
+            var harmonyWind = new HarmonyLib.Harmony(HARMONY_ID_WIND);
+            LogMessage("Using AccessTools for Wind.Update() hook...");
+            harmonyWind.Patch(
+                AccessTools.Method(typeof(Wind), "Update"),
+                postfix: new HarmonyMethod(typeof(TelemetryMain), nameof(OnWindUpdate))
             );
 
             // LogMessage($"[" + Scene.SceneManager.GetActiveScene().name + $" / distanceThreshold={Settings.distanceThreshold:F2}]");
@@ -204,10 +217,11 @@ namespace Telemetry
 
                     previousPosition = GameManager.GetVpFPSPlayer().transform.position; // Player current position
                     lastStage = WeatherStage.Undefined; // Reset last weather stage seen.
+                    lastWindStrength = null;         // Reset last wind strength seen.
                     timer = timer - Settings.waitTime;  // Reset timer to (near) zero.
                 }
 
-                // HUDMessage.AddMessage("Sandbox Scene " + sceneName + " was loaded.",false,true);
+                if (Settings.enableTelemetryHUDDisplay) HUDMessage.AddMessage("Sandbox Scene " + sceneName + " was loaded.",false,true);
             }
             else
             {
@@ -266,6 +280,7 @@ namespace Telemetry
                 if ((Settings.enableTelemetryTimeDataCapture && (timer > Settings.waitTime)) || 
                     (Settings.enableTelemetryDistanceDataCapture && (howFar > Settings.distanceThreshold)) ||
                     (Settings.enableTelemetryWeatherChangeDataCapture && (weatherStageChanged == true)) ||
+                    (Settings.enableTelemetryWindStrengthChangeDataCapture && (windStrengthChanged == true)) ||
                     InputManager.GetKeyDown(InputManager.m_CurrentContext, Settings.options.captureKey))
                 {
                     // Are we here because the distance threshold was met or because the user pressed the capture key?
@@ -273,6 +288,7 @@ namespace Telemetry
                     if (howFar > Settings.distanceThreshold) { triggerCode = "D"; }  // We are here because the distance threshold was exceeded.
                     if (timer > Settings.waitTime) { triggerCode = "T"; }            // We are here because the waittime threshold was exceeded.
                     if (weatherStageChanged == true) { triggerCode = "W"; }          // We are here because the weather stage changed.
+                    if (windStrengthChanged == true) { triggerCode = "w"; }          // We are here because the wind changed.
 
                     // Deterine IRL time.  We use this to timestamp the data with the current IRL time.
                     string irlDateTime = DateTime.Now.ToString("MM/dd/yyyy HH:mm:ss");
@@ -313,7 +329,6 @@ namespace Telemetry
                     // Let's talk "stats"...
                     // StatsManager statsManager = GameManager.GetStatsManager();
 
-
                     string weatherDebugText = Weather.GetDebugWeatherText();
                     string? weatherSetLine = GetLineStartingWith(weatherDebugText, "Weather Set");
                     string? weatherSetValueText = GetTextAfterSeparator(weatherSetLine, ':');
@@ -324,6 +339,9 @@ namespace Telemetry
                     float weatherCurrentWindchill = weatherComponent.GetCurrentWindchill();
                     // float weatherCurrentTemperatureWithWindchill = weatherComponent.GetCurrentTemperatureWithWindchill();  // Nope. This includes heat sources.
                     float weatherCurrentTemperatureWithWindchill = weatherCurrentTemperatureWithoutHeatSources + weatherCurrentWindchill;  // Calculate this to avoid the heat sources being included.
+
+                    // Let's talk Wind...
+                    // LogAndShowWindFromSettings();
 
                     // Various ways to get the current save name and game id
                     //string currentSaveName = SaveGameSystem.GetCurrentSaveName();   // Example: "sandbox27"
@@ -386,6 +404,8 @@ namespace Telemetry
                         // If the data file does not exist, Write a comment as the 1st line of the file with useful information (i.e. file format version #).
                         LogData("; Telemetry data file format version: " + Log_File_Format_Version_Number);
                         LogData("; Telemetry Mod Version: " + MOD_VERSION_NUMBER);
+                        //LogData(";");
+                        //LogData(";  ** Testing detection of a wind change. **");
                         LogData(";");
                         //LogData(";                                          ----- player -----   ------ camera ------ - camera-");
                         //LogData(";                                          -----position-----   ------position------ - angle   ---Weather--  ---Weather--  -Current- -Current-   -Current Temp  -");
@@ -393,7 +413,7 @@ namespace Telemetry
 
                         //LogData(";    irlDateTime   |   gameTime   |sceneName");
                         //LogData(";         ↓        |       ↓      | ↓");
-                               //11/25/2025 08:17:08|179.1017456055|CanneryRegion|-357.67|31.81|-519.39|-357.67|33.56|-519.39|187.15|-22.70|LightFog_cannery|LightFog|-13.43|0.00|-13.43|D
+                        //11/25/2025 08:17:08|179.1017456055|CanneryRegion|-357.67|31.81|-519.39|-357.67|33.56|-519.39|187.15|-22.70|LightFog_cannery|LightFog|-13.43|0.00|-13.43|D
 
                         //LogData(";         \u2193   |     \u2193 |   \u2193");
 
@@ -409,12 +429,13 @@ namespace Telemetry
                         LogData(";   cameraAngleElevation (x, y): Camera's angle and elevation");
                         LogData(";   weatherSet: Current weather set");
                         LogData(";   weatherStage: Current weather stage");
+                        LogData(";   windStrength: Current wind strength (Calm, SlightlyWindy, Windy, VeryWindy, Blizzard)");
                         //LogData(";   weatherStageName: Current weather stage name");
                         //LogData(";   weatherCurrentTemperature: Current temperature in the game world");
                         LogData(";   weatherCurrentTemperatureWithoutHeatSources: Current temperature (C) without any heat sources in the game world");
                         LogData(";   weatherCurrentWindchill: Current wind chill temperature (C) in the game world");
                         LogData(";   weatherCurrentTemperatureWithWindchill: Current temperature (C) with wind chill factored in");
-                        LogData(";   triggerCode: Code indicating what triggered the data capture (T=Time, D=Distance, K=Keypress, W=Weather change)");
+                        LogData(";   triggerCode: Code indicating what triggered the data capture (T=Time, D=Distance, K=Keypress, W=Weather change, w=Wind change)");
                         LogData(";");
                     }
 
@@ -427,6 +448,7 @@ namespace Telemetry
                         $"|{cameraAngleElevation.x:F2}|{cameraAngleElevation.y:F2}" +
                         $"|{weatherSetValueText}" +
                         $"|{weatherStage,2}" +
+                        $"|{(lastWindStrength.HasValue ? lastWindStrength.Value.ToString() : "<null>"),2}" + 
                         // $"|{weatherDebugText}" +
                         //$"|{weatherStageName}" +
                         //$"|{weatherCurrentTemperature:F2}" +
@@ -454,6 +476,9 @@ namespace Telemetry
 
                     // Reset the weather stage changed flag to false
                     weatherStageChanged = false;
+
+                    // Reset the wind strength changed flag to false
+                    windStrengthChanged = false;
                 }
 
                 //SaveGameSystem.GetNewestSaveSlotForActiveGame();
@@ -461,6 +486,7 @@ namespace Telemetry
 
         }
 
+        // Helper function to calculate the distance the player has moved since the last logged position.
         private float GetDistanceToPlayer()
         {
             if (GameManager.GetVpFPSPlayer())
@@ -584,7 +610,7 @@ namespace Telemetry
                 LogMessage($"[WEATHER CHANGE - {source}] {DateTime.Now:HH:mm:ss} | Day {day:F1} | {GameManager.m_ActiveScene}");
                 LogMessage($"   → {setName} ({stage}) → Feels like {feelsLike:F1}°C");
 
-                if (Settings.enableTelemetryWeatherChangeHUDDisplay)
+                if (Settings.enableTelemetryHUDDisplay)
                 {
                     HUDMessage.AddMessage($"Weather → {setName} ({stage}) → Feels like {feelsLike:F1}°C", 5f, true);
                 }
@@ -599,11 +625,136 @@ namespace Telemetry
         // Clean up Harmony Weather patches on mod unload
         public override void OnDeinitializeMelon()
         {
-            HarmonyLib.Harmony.UnpatchID(HARMONY_ID);
-            //MelonLogger.Msg("[LogCurrentWeather] Unloaded cleanly.");
-            LogMessage("[LogCurrentWeather] Unloaded cleanly.");
+            HarmonyLib.Harmony.UnpatchID(HARMONY_ID_WEATHER);
+            LogMessage("OnWeatherUpdate unloaded cleanly.");
+
+            HarmonyLib.Harmony.UnpatchID(HARMONY_ID_WIND);
+            LogMessage("OnWindUpdate unloaded cleanly.");
         }
 
+        // Helpers to read wind values and match a WindSettings entry.
+        // Call `LogAndShowWindFromSettings()` (or call `GetWindInfoFromSettings()` directly) from `OnUpdate()` or a debug key handler.
+        public static (Il2Cpp.WindSettings? settings, float baseMPH, float actualMPH, float baseAngleDeg, float angleDeg) GetWindInfoFromSettings()
+        {
+            // Try the GameManager helper first, fallback to a scene lookup.
+            Il2Cpp.Wind wind = null;
+            try { wind = GameManager.GetWindComponent(); } catch { }
+            if (wind == null)
+            {
+                try { wind = UnityEngine.Object.FindObjectOfType<Il2Cpp.Wind>(); } catch { }
+            }
 
+            if (wind == null)
+            {
+                LogMessage("GetWindInfoFromSettings: Wind component not found");
+                return (null, 0f, 0f, 0f, 0f);
+            }
+
+            // Read numeric values the Wind class exposes.
+            float baseMPH = 0f, actualMPH = 0f, baseAngle = 0f, angle = 0f;
+            try
+            {
+                baseMPH = wind.m_CurrentMPH_Base;
+                actualMPH = wind.m_CurrentMPH;
+                baseAngle = wind.m_CurrentAngleDeg_Base;
+                angle = wind.m_CurrentAngleDeg;
+            }
+            catch (Exception ex)
+            {
+                LogMessage("GetWindInfoFromSettings read numeric fields failed: " + ex.Message);
+            }
+
+            // Attempt to find a WindSettings whose m_VelocityRange contains the base speed.
+            try
+            {
+                var settingsArray = wind.m_WindSettings;
+                if (settingsArray != null)
+                {
+                    for (int i = 0; i < settingsArray.Length; i++)
+                    {
+                        var s = settingsArray[i];
+                        if (s == null) continue;
+                        // m_VelocityRange.x = min, .y = max (convention)
+                        var vr = s.m_VelocityRange;
+                        if (actualMPH >= (vr.x * baseMPH) && actualMPH <= (vr.y * baseMPH))
+                        {
+                            return (s, baseMPH, actualMPH, baseAngle, angle);
+                        }
+                    }
+
+                    // Not found by range — return first as fallback
+                    if (settingsArray.Length > 0)
+                    {
+                        LogMessage("Unable to find velocity based on range.");
+                        return (settingsArray[0], baseMPH, actualMPH, baseAngle, angle);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                LogMessage("GetWindInfoFromSettings inspect settings failed: " + ex.Message);
+            }
+
+            return (null, baseMPH, actualMPH, baseAngle, angle);
+        }
+
+        // Convenience: log and show wind values (and matched WindSettings name if found)
+        public static void LogAndShowWindFromSettings()
+        {
+            var info = GetWindInfoFromSettings();
+            string settingsName = "<none>";
+            if (info.settings != null)
+            {
+                try { settingsName = info.settings.name ?? "<unnamed>"; } catch { settingsName = "<err>"; }
+            }
+
+            string msg = $"Wind (settings={settingsName}) base={info.baseMPH:F1} MPH (angle {info.baseAngleDeg:F0}°) actual={info.actualMPH:F1} MPH (angle {info.angleDeg:F0}°)";
+            LogMessage(msg);
+            if (Settings.enableTelemetryHUDDisplay) try { HUDMessage.AddMessage(msg, 4f, true); } catch { /* HUD may be unavailable */ }
+        }
+
+        // Add this Harmony postfix handler (paste with the other helper methods)
+        private static void OnWindUpdate(Wind __instance)
+        {
+            try
+            {
+                if (__instance == null) return;
+                if (inMenu) return; // avoid noise while in menus
+                if (lastWindStrength.HasValue && __instance.m_CurrentStrength.Equals(lastWindStrength.Value))
+                {
+                    return; // no change
+                }
+
+                // Wind strength has changed!  Read current wind state.
+                var currentStrength = __instance.m_CurrentStrength;
+                float currentMPH = __instance.m_CurrentMPH;
+
+                // Strength change (e.g. Calm -> Blizzard) - use enum/struct equality
+                if (!lastWindStrength.HasValue || !currentStrength.Equals(lastWindStrength.Value))
+                {
+                    LogMessage($"Wind strength change: {(lastWindStrength.HasValue ? lastWindStrength.Value.ToString() : "<null>")} -> {currentStrength}");
+                    if (Settings.enableTelemetryHUDDisplay) try { HUDMessage.AddMessage($"Wind: {lastWindStrength?.ToString() ?? "<null>"} → {currentStrength}", 4f, true); } catch { }
+                    // Show detailed wind numbers and matched settings
+                    //LogAndShowWindFromSettings();
+                    windStrengthChanged = true; // set Wind trigger flag to true for telemetry logging
+                }
+                //else
+                //{
+                //    // Minor speed drift detection (threshold to avoid tiny noise)
+                //    if (Math.Abs(currentMPH - lastWindMPH) > 0.25f)
+                //    {
+                //        LogMessage($"Wind speed change: {lastWindMPH:F4} -> {currentMPH:F4} MPH");
+                //    }
+                //}
+
+                // Update trackers
+                lastWindStrength = currentStrength;
+                lastWindMPH = currentMPH;
+            }
+            catch (Exception ex)
+            {
+                LogMessage("OnWindUpdate error: " + ex.Message);
+            }
+        }
     }
 }

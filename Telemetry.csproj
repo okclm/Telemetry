@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
 	<!-- https://stackoverflow.com/questions/5129090/how-to-edit-csproj-file -->
 	<!-- if you are using Visual Studio and you have the need to view or edit your CSPROJ file, while in Visual Studio, you can do so by following these simple steps: -->
@@ -65,6 +65,9 @@
             <Private>False</Private>
         </Reference>
     </ItemDefinitionGroup>
+    <ItemGroup>
+      <None Remove="Weather notes.txt" />
+    </ItemGroup>
 
     <!--This is the list of assemblies that the mod references. Most of these are unnecessary for normal mods, but are included here for completeness.-->
     <ItemGroup>
