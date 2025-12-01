@@ -15,6 +15,7 @@ It collects various telemetry data while playing for use outside of the game. Th
 - cameraPosition (x, y, z): Camera's position coordinates in the game world
 - cameraAngleElevation (x, y): Camera's angle and elevation
 - weatherSet: Current weather set
+- weatherSetDurationHours: Duration of current weather set in hours
 - weatherStage: Current weather stage
 - windStrength: Current wind strength (Calm, SlightlyWindy, Windy, VeryWindy, Blizzard)
 - weatherCurrentTemperatureWithoutHeatSources: Current temperature (C) without heat sources

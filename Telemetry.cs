@@ -15,6 +15,8 @@ using static Il2CppSystem.Net.ServicePointManager;
 using Scene = UnityEngine.SceneManagement;
 using HarmonyLib;
 using Il2CppTLD.Logging;
+using System.Globalization;
+using System.Text.RegularExpressions;
 
 /*
  * Stuff you need to know:
@@ -72,7 +74,7 @@ namespace Telemetry
         // Are we in the game menu?
         public static bool inMenu = true;
 
-        public const string MOD_VERSION_NUMBER = "Version 1.1 - 11/30/2025";      // The version # of the mod.
+        public const string MOD_VERSION_NUMBER = "Version 1.1 - 12/01/2025";      // The version # of the mod.
         //internal const string LOG_FILE_FORMAT_VERSION_NUMBER = "1.0";           // The version # of the log file format.  This is used to determine if the log file format has changed and we need to update the code to read it.
         internal const string DEFAULT_FILE_NAME = "Telemetry.log";                // The log file is written in the MODS folder for TLD  (i.e. D:\Program Files (x86)\Steam\steamapps\common\TheLongDark\Mods)
         internal const string FILE_NAME_DESMOS2D = "Telemetry_Desmos2D.log";      // The log file is written in the MODS folder for TLD  (i.e. D:\Program Files (x86)\Steam\steamapps\common\TheLongDark\Mods)
@@ -213,12 +215,16 @@ namespace Telemetry
                 if (GameManager.GetVpFPSPlayer())
                 {
                     // Reset trigger counters on a scene change...
+                    // Note: This means that distance travelled and wait time are counted per-scene.
+                    // The Weather Stage and Wind Strength don't change on a scene change.  So maybe don't reset them?
                     LogMessage($"[" + Scene.SceneManager.GetActiveScene().name + $"] / Enter OnSceneWasLoaded. Resetting telemetry data capture triggers.");
 
                     previousPosition = GameManager.GetVpFPSPlayer().transform.position; // Player current position
-                    lastStage = WeatherStage.Undefined; // Reset last weather stage seen.
-                    lastWindStrength = null;         // Reset last wind strength seen.
                     timer = timer - Settings.waitTime;  // Reset timer to (near) zero.
+
+                    // Don't reset weather and wind tracking on scene change.
+                    //lastStage = WeatherStage.Undefined; // Reset last weather stage seen.
+                    //lastWindStrength = null;         // Reset last wind strength seen.
                 }
 
                 if (Settings.enableTelemetryHUDDisplay) HUDMessage.AddMessage("Sandbox Scene " + sceneName + " was loaded.",false,true);
@@ -311,6 +317,8 @@ namespace Telemetry
                     WeatherStage weatherStage = weatherComponent.GetWeatherStage();
                     string weatherStageName = weatherComponent.GetWeatherStageDisplayName(weatherStage);
 
+                    // WeatherSet.GetName(weatherComponent.GetCurrentWeatherSet());  // How to access the current weather set name without parsing it from the debug text.
+
                     // ** Example weather debug text (weatherDebugText).  Note it is multi-line and verbose.: **
                     // Morning To Midday (51.59%)
                     // Weather Set: LightFog_cannery. 4.27hrs. (61.6 %)
@@ -333,6 +341,18 @@ namespace Telemetry
                     string? weatherSetLine = GetLineStartingWith(weatherDebugText, "Weather Set");
                     string? weatherSetValueText = GetTextAfterSeparator(weatherSetLine, ':');
                     weatherSetValueText = GetTextBeforeSeparator(weatherSetValueText, '.');
+                    float? weatherSetDurationHours = null;  // Duration of current weather set in hours.   Default value is null (undefined)
+
+                    string? after = GetTextAfterSeparator(weatherSetLine, ':'); // e.g. " Blizzard_ashcanyon. 8.21hrs."
+                    if (after != null)
+                    {
+                        var m = Regex.Match(after, @"(\d+(\.\d+)?)\s*hrs", RegexOptions.IgnoreCase);
+                        if (m.Success && float.TryParse(m.Groups[1].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out float hours))
+                        {
+                            // hours is the duration of the current weather set (in hours)
+                            weatherSetDurationHours = hours;
+                        }
+                    }
 
                     float weatherCurrentTemperature = weatherComponent.GetCurrentTemperature();
                     float weatherCurrentTemperatureWithoutHeatSources = weatherComponent.GetCurrentTemperatureWithoutHeatSources();
@@ -428,6 +448,7 @@ namespace Telemetry
                         LogData(";   cameraPosition (x, y, z): Camera's position coordinates in the game world");
                         LogData(";   cameraAngleElevation (x, y): Camera's angle and elevation");
                         LogData(";   weatherSet: Current weather set");
+                        LogData(";   weatherSetDurationHours: Duration of current weather set in hours");
                         LogData(";   weatherStage: Current weather stage");
                         LogData(";   windStrength: Current wind strength (Calm, SlightlyWindy, Windy, VeryWindy, Blizzard)");
                         //LogData(";   weatherStageName: Current weather stage name");
@@ -447,6 +468,7 @@ namespace Telemetry
                         $"|{cameraPosition.x:F2}|{cameraPosition.y:F2}|{cameraPosition.z:F2}" +
                         $"|{cameraAngleElevation.x:F2}|{cameraAngleElevation.y:F2}" +
                         $"|{weatherSetValueText}" +
+                        $"|{(weatherSetDurationHours.HasValue ? weatherSetDurationHours.Value.ToString() : "<null>"),2}" +
                         $"|{weatherStage,2}" +
                         $"|{(lastWindStrength.HasValue ? lastWindStrength.Value.ToString() : "<null>"),2}" + 
                         // $"|{weatherDebugText}" +
@@ -676,6 +698,7 @@ namespace Telemetry
                         if (s == null) continue;
                         // m_VelocityRange.x = min, .y = max (convention)
                         var vr = s.m_VelocityRange;
+                        LogMessage($"Inspecting WindSettings #{i+1}. \"{s.name}\": range=({vr.x:F4}, {vr.y:F4}) * baseMPH={baseMPH:F4} => ({vr.x * baseMPH:F4}, {vr.y * baseMPH:F4}) actualMPH={actualMPH:F4}");
                         if (actualMPH >= (vr.x * baseMPH) && actualMPH <= (vr.y * baseMPH))
                         {
                             return (s, baseMPH, actualMPH, baseAngle, angle);
@@ -707,10 +730,10 @@ namespace Telemetry
             {
                 try { settingsName = info.settings.name ?? "<unnamed>"; } catch { settingsName = "<err>"; }
             }
-
-            string msg = $"Wind (settings={settingsName}) base={info.baseMPH:F1} MPH (angle {info.baseAngleDeg:F0}°) actual={info.actualMPH:F1} MPH (angle {info.angleDeg:F0}°)";
+            // Todo: The settingName value is not correct.  Investigate.
+            string msg = $"Wind (settingsName is not correct={settingsName}) base={info.baseMPH:F1} MPH (angle {info.baseAngleDeg:F0}°) actual={info.actualMPH:F1} MPH (angle {info.angleDeg:F0}°)";
             LogMessage(msg);
-            if (Settings.enableTelemetryHUDDisplay) try { HUDMessage.AddMessage(msg, 4f, true); } catch { /* HUD may be unavailable */ }
+            // if (Settings.enableTelemetryHUDDisplay) try { HUDMessage.AddMessage(msg, 4f, true); } catch { /* HUD may be unavailable */ }
         }
 
         // Add this Harmony postfix handler (paste with the other helper methods)
@@ -735,7 +758,7 @@ namespace Telemetry
                     LogMessage($"Wind strength change: {(lastWindStrength.HasValue ? lastWindStrength.Value.ToString() : "<null>")} -> {currentStrength}");
                     if (Settings.enableTelemetryHUDDisplay) try { HUDMessage.AddMessage($"Wind: {lastWindStrength?.ToString() ?? "<null>"} → {currentStrength}", 4f, true); } catch { }
                     // Show detailed wind numbers and matched settings
-                    //LogAndShowWindFromSettings();
+                    LogAndShowWindFromSettings();
                     windStrengthChanged = true; // set Wind trigger flag to true for telemetry logging
                 }
                 //else
