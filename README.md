@@ -18,6 +18,8 @@ It collects various telemetry data while playing for use outside of the game. Th
 - weatherSetDurationHours: Duration of current weather set in hours
 - weatherStage: Current weather stage
 - windStrength: Current wind strength (Calm, SlightlyWindy, Windy, VeryWindy, Blizzard)
+- windSpeedMPH: Current wind speed in MPH
+- windPhaseDurationHours: Current wind strength duration in hours
 - weatherCurrentTemperatureWithoutHeatSources: Current temperature (C) without heat sources
 - weatherCurrentWindchill: Current wind chill temperature (C)
 - weatherCurrentTemperatureWithWindchill: Current temperature (C) with wind chill factored in
@@ -31,8 +33,8 @@ Data is captured periodically based on various triggers:
 - When there is a change in the current wind strength
 
 The telemtry data is saved to a text file located in the game's Mods folder.
-The filename is formatted as the name of the current game save followed by "_Telemetry.log".  Any illegal or blank characters in the save name are replaced with underscores.
-For example, if the name of the current game save is "FAR TERRITORY", the telemetry data will be saved in "FAR_TERRITORY_Telemetry.log"
+The filename is formatted as the name of the current game save followed by "_Telemetry.log".  Any illegal characters are removed and blank characters are replaced with underscores.
+For example, if the name of the current game save is "FAR TERRITORY?", the telemetry data will be saved in "FAR_TERRITORY_Telemetry.log"
 
 ### Options
 

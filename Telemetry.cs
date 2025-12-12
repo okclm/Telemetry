@@ -1,22 +1,23 @@
-﻿using Il2Cpp;
+﻿using HarmonyLib;
+using Il2Cpp;
 using Il2CppInterop;
+using Il2CppInterop.Runtime;
 using Il2CppInterop.Runtime.Injection;
 using Il2CppNewtonsoft.Json.Linq;
+using Il2CppTLD.Logging;
 using Il2CppTLD.Stats;
 using MelonLoader;
 using MelonLoader.Utils;
 using System.Collections;
-using System.Reflection;
 using System.Diagnostics;
+using System.Globalization;
+using System.Reflection;
 using System.Runtime.CompilerServices;
+using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using UnityEngine;
 using static Il2CppSystem.Net.ServicePointManager;
 using Scene = UnityEngine.SceneManagement;
-using HarmonyLib;
-using Il2CppTLD.Logging;
-using System.Globalization;
-using System.Text.RegularExpressions;
 
 /*
  * Stuff you need to know:
@@ -61,7 +62,8 @@ namespace Telemetry
         // Wind tracking stuff
         private const string HARMONY_ID_WIND = "OKCLM.tld.windsethook";         // Used in Harmony instance creation.
         private static WindStrength? lastWindStrength = null;                   // Keep track of last wind strength seen.
-        private static float lastWindMPH = -1f;                                 // Keep track of last wind speed seen.
+        public static float? lastWindMPH = null;                                // Keep track of last wind speed seen.
+        public static float? lastWindPhaseDurationHours = null;                 // Keep track of last wind phase duration seen.
         public static bool windStrengthChanged = false;                         // Has the wind strength changed since last check? 
 
         // *** Stuff for capturing telemtry data every waitTime seconds ***
@@ -74,7 +76,7 @@ namespace Telemetry
         // Are we in the game menu?
         public static bool inMenu = true;
 
-        public const string MOD_VERSION_NUMBER = "Version 1.1 - 12/01/2025";      // The version # of the mod.
+        public const string MOD_VERSION_NUMBER = "Version 1.1 - 12/12/2025";      // The version # of the mod.
         //internal const string LOG_FILE_FORMAT_VERSION_NUMBER = "1.0";           // The version # of the log file format.  This is used to determine if the log file format has changed and we need to update the code to read it.
         internal const string DEFAULT_FILE_NAME = "Telemetry.log";                // The log file is written in the MODS folder for TLD  (i.e. D:\Program Files (x86)\Steam\steamapps\common\TheLongDark\Mods)
         internal const string FILE_NAME_DESMOS2D = "Telemetry_Desmos2D.log";      // The log file is written in the MODS folder for TLD  (i.e. D:\Program Files (x86)\Steam\steamapps\common\TheLongDark\Mods)
@@ -161,6 +163,7 @@ namespace Telemetry
             //            }
             //#endif
 
+            LogMessage("Starting Telemetry Mod: " + MOD_VERSION_NUMBER);
             LogMessage("Initializing Melon.");
 
             var harmonyWeather = new HarmonyLib.Harmony(HARMONY_ID_WEATHER);
@@ -273,12 +276,31 @@ namespace Telemetry
                 }
             }
 
+            // The lastWindStrength variable is set in the OnWindUpdate() hook.
+            // If it has not been set yet, we are too early.
+            // So do nothing at this time.
+            if (!lastWindStrength.HasValue)
+            {
+                // LogMessage($"; Wind strength not yet initialized.");
+                // LogMessage($"; Detected wind strength <null> likely due to start up timing.  No action taken.");
+                return; // Wind strength not yet initialized.  Nothing to do here.
+            }
+
             // LogMessage($"[" + Scene.SceneManager.GetActiveScene().name + $" / OnUpdate. inMenu={inMenu}]");
 
             if (GameManager.GetVpFPSPlayer() && (!inMenu))
             {
                 // Calculate distance travelled by player
                 float howFar = GetDistanceToPlayer();
+
+                // Determine the hours played.  This is a float and we can use it as a timestamp for the data.
+                float gameTime = GameManager.GetTimeOfDayComponent().GetHoursPlayedNotPaused();
+                // Sometimes the gameTime is zero here.  Seen most often when entering a new scene (indoors).  Check for gameTime zero and skip logging if so.
+                if (gameTime == 0f)
+                {
+                    LogMessage($"; Detected gameTime of zero likely due to scene change timing.  No action taken.");
+                    return;     // When gameTime is zero, nothing to do here.
+                }
 
                 // Have we moved far enough to do something?
                 // Or, did the user press the capture telemetry key?
@@ -299,8 +321,9 @@ namespace Telemetry
                     // Deterine IRL time.  We use this to timestamp the data with the current IRL time.
                     string irlDateTime = DateTime.Now.ToString("MM/dd/yyyy HH:mm:ss");
 
+                    // Moved to above to address gameTime zero issue.
                     // Determine the hours played.  This is a float and we can use it as a timestamp for the data.
-                    float gameTime = GameManager.GetTimeOfDayComponent().GetHoursPlayedNotPaused();
+                    //float gameTime = GameManager.GetTimeOfDayComponent().GetHoursPlayedNotPaused();
 
                     // Determine current scene name
                     string? sceneName = Scene.SceneManager.GetActiveScene().name;
@@ -362,14 +385,16 @@ namespace Telemetry
 
                     // Let's talk Wind...
                     // LogAndShowWindFromSettings();
+                    // float? windPhaseDurationHours = null;                     // m_PhaseDurationHours
 
-                    // Various ways to get the current save name and game id
-                    //string currentSaveName = SaveGameSystem.GetCurrentSaveName();   // Example: "sandbox27"
-                    //string csn = SaveGameSystem.m_CurrentSaveName;                  // Example: "sandbox27"
-                    //uint cgi = SaveGameSystem.m_CurrentGameId;                      // Example: 27
 
-                    // TODO Make sure the user-defined save name is valid.  Replace any illegal filename characters with an underscore.
-                    string ssUDF = SanitizeFileName(SaveGameSystem.GetNewestSaveSlotForActiveGame().m_UserDefinedName);   // Example: "FAR TERRITORY"
+        // Various ways to get the current save name and game id
+        //string currentSaveName = SaveGameSystem.GetCurrentSaveName();   // Example: "sandbox27"
+        //string csn = SaveGameSystem.m_CurrentSaveName;                  // Example: "sandbox27"
+        //uint cgi = SaveGameSystem.m_CurrentGameId;                      // Example: 27
+
+        // TODO Make sure the user-defined save name is valid.  Replace any illegal filename characters with an underscore.
+        string ssUDF = SanitizeFileName(SaveGameSystem.GetNewestSaveSlotForActiveGame().m_UserDefinedName);   // Example: "FAR TERRITORY"
 
                     // How to get at the maps?
                     // Il2Cpp.MapDetailManager.GetName(GameManager.GetMapDetailManager());
@@ -423,7 +448,7 @@ namespace Telemetry
                     {
                         // If the data file does not exist, Write a comment as the 1st line of the file with useful information (i.e. file format version #).
                         LogData("; Telemetry data file format version: " + Log_File_Format_Version_Number);
-                        LogData("; Telemetry Mod Version: " + MOD_VERSION_NUMBER);
+                        LogData("; Telemetry Mod: " + MOD_VERSION_NUMBER);
                         //LogData(";");
                         //LogData(";  ** Testing detection of a wind change. **");
                         LogData(";");
@@ -451,6 +476,8 @@ namespace Telemetry
                         LogData(";   weatherSetDurationHours: Duration of current weather set in hours");
                         LogData(";   weatherStage: Current weather stage");
                         LogData(";   windStrength: Current wind strength (Calm, SlightlyWindy, Windy, VeryWindy, Blizzard)");
+                        LogData(";   windSpeedMPH: Current wind speed in MPH");
+                        LogData(";   windPhaseDurationHours: Current wind strength duration in hours");
                         //LogData(";   weatherStageName: Current weather stage name");
                         //LogData(";   weatherCurrentTemperature: Current temperature in the game world");
                         LogData(";   weatherCurrentTemperatureWithoutHeatSources: Current temperature (C) without any heat sources in the game world");
@@ -471,6 +498,8 @@ namespace Telemetry
                         $"|{(weatherSetDurationHours.HasValue ? weatherSetDurationHours.Value.ToString() : "<null>"),2}" +
                         $"|{weatherStage,2}" +
                         $"|{(lastWindStrength.HasValue ? lastWindStrength.Value.ToString() : "<null>"),2}" + 
+                        $"|{(lastWindMPH.HasValue ? lastWindMPH.Value.ToString() : "<null>"),2}" + 
+                        $"|{(lastWindPhaseDurationHours.HasValue ? lastWindPhaseDurationHours.Value.ToString() : "<null>"),2}" + 
                         // $"|{weatherDebugText}" +
                         //$"|{weatherStageName}" +
                         //$"|{weatherCurrentTemperature:F2}" +
@@ -673,13 +702,14 @@ namespace Telemetry
             }
 
             // Read numeric values the Wind class exposes.
-            float baseMPH = 0f, actualMPH = 0f, baseAngle = 0f, angle = 0f;
+            float baseMPH = 0f, actualMPH = 0f, baseAngle = 0f, angle = 0f, maxMPH = 0f;
             try
             {
                 baseMPH = wind.m_CurrentMPH_Base;
                 actualMPH = wind.m_CurrentMPH;
                 baseAngle = wind.m_CurrentAngleDeg_Base;
                 angle = wind.m_CurrentAngleDeg;
+                maxMPH = wind.m_MaxWindMPH;
             }
             catch (Exception ex)
             {
@@ -698,18 +728,29 @@ namespace Telemetry
                         if (s == null) continue;
                         // m_VelocityRange.x = min, .y = max (convention)
                         var vr = s.m_VelocityRange;
-                        LogMessage($"Inspecting WindSettings #{i+1}. \"{s.name}\": range=({vr.x:F4}, {vr.y:F4}) * baseMPH={baseMPH:F4} => ({vr.x * baseMPH:F4}, {vr.y * baseMPH:F4}) actualMPH={actualMPH:F4}");
-                        if (actualMPH >= (vr.x * baseMPH) && actualMPH <= (vr.y * baseMPH))
+                        LogMessage($"Inspecting WindSettings #{i+1}. \"{s.name}\": range=({vr.x:F8}, {vr.y:F8}) * maxMPH={maxMPH:F8} => ({vr.x * maxMPH:F8}, {vr.y * maxMPH:F8}), baseMPH={baseMPH:F8},  actualMPH={actualMPH:F8}");
+                        if (actualMPH >= (vr.x * maxMPH) && actualMPH <= (vr.y * maxMPH))
                         {
                             return (s, baseMPH, actualMPH, baseAngle, angle);
                         }
                     }
 
-                    // Not found by range — return first as fallback
+                    // Not found by range.  Could we match based on a pair of adjacent settings?
+                    // Consider the case where the baseMPH is between two ranges.
+                    // #1. "Calm":          range=(0.0460, 0.0770) * maxMPH=85.0000 => (3.9100, 6.5450),   baseMPH=9.1307 is above Calm max of 6.5450
+                    // #2. "SlightlyWindy": range=(0.1176, 0.1530) * maxMPH=85.0000 => (10.0000, 13.0050), baseMPH=9.1307 is below SlightlyWindy min of 10.0000
+                    // #3. "Windy":         range=(0.2118, 0.3850) * maxMPH=85.0000 => (18.0000, 32.7250), baseMPH=9.1307
+                    // #4. "VeryWindy":     range=(0.4118, 0.6150) * maxMPH=85.0000 => (35.0000, 52.2750), baseMPH=9.1307
+                    // #5. "Blizzard":      range=(1.0000, 1.0000) * maxMPH=85.0000 => (85.0000, 85.0000), baseMPH=9.1307
+                    // This is probably the case where the wind is changing and is between two states.  In the above example, 
+                    // the baseMPH=9.1307 is between Calm max of 6.5450 and SlightlyWindy min of 10.0000.  Perhaps we call this "Calm..SlightlyWindy"?
+                    // That would be a bit messy because we are returning a single WindSettings object.  So for now we will just log a message and return null.
+
                     if (settingsArray.Length > 0)
                     {
                         LogMessage("Unable to find velocity based on range.");
-                        return (settingsArray[0], baseMPH, actualMPH, baseAngle, angle);
+                        //return (settingsArray[0], baseMPH, actualMPH, baseAngle, angle);
+                        return (null, baseMPH, actualMPH, baseAngle, angle);
                     }
                 }
             }
@@ -730,10 +771,60 @@ namespace Telemetry
             {
                 try { settingsName = info.settings.name ?? "<unnamed>"; } catch { settingsName = "<err>"; }
             }
-            // Todo: The settingName value is not correct.  Investigate.
-            string msg = $"Wind (settingsName is not correct={settingsName}) base={info.baseMPH:F1} MPH (angle {info.baseAngleDeg:F0}°) actual={info.actualMPH:F1} MPH (angle {info.angleDeg:F0}°)";
+            // Todo: The settingName value is not correct.  Investigate.  Fixed.  Needed to use the min/max times the maxMPH wind value.
+            string msg = $"Wind (settingsName={settingsName}) base={info.baseMPH:F1} MPH (angle {info.baseAngleDeg:F0}°) actual={info.actualMPH:F1} MPH (angle {info.angleDeg:F0}°)";
             LogMessage(msg);
-            // if (Settings.enableTelemetryHUDDisplay) try { HUDMessage.AddMessage(msg, 4f, true); } catch { /* HUD may be unavailable */ }
+            if (Settings.enableTelemetryHUDDisplay) try { HUDMessage.AddMessage(msg, 4f, true); } catch { /* HUD may be unavailable */ }
+        }
+
+        // Logs wind settings info (for debugging)
+        public static void LogWindSettings(Il2Cpp.Wind wind)
+        {
+            if (wind == null)
+            {
+                LogMessage("Wind component null.  No action.");
+                return;
+            }
+
+            // Attempt to log WindSettings for each wind strength (Calm, SlightlyWindy, Windy, VeryWindy, Blizzard).
+            // "name"
+            // "m_VelocityRange"
+            // "m_GustinessRange"
+            // "m_LateralBlusterRange"
+            // "m_VerticalBlusterRange"
+            // "m_RTPC_Range"
+            // "m_ClothRandomRange"
+
+            try
+            {
+                var settingsArray = wind.m_WindSettings;
+                if (settingsArray != null)
+                {
+                    for (int i = 0; i < settingsArray.Length; i++)
+                    {
+                        var s = settingsArray[i];
+                        if (s == null) continue;
+                        // m_VelocityRange.x = min, .y = max (convention)
+                        var vr = s.m_VelocityRange;
+                        var gr = s.m_GustinessRange;
+                        var lbr = s.m_LateralBlusterRange;
+                        var vbr = s.m_VerticalBlusterRange;
+                        var rtpcr = s.m_RTPC_Range;
+                        var crr = s.m_ClothRandomRange;
+                        // LogMessage($"Wind setting #{i + 1}. \"{s.name}\": range=({vr.x:F8}, {vr.y:F8}) * maxMPH={maxMPH:F8} => ({vr.x * maxMPH:F8}, {vr.y * maxMPH:F8}), baseMPH={baseMPH:F8},  actualMPH={actualMPH:F8}");
+                        LogMessage($"Wind setting #{i + 1}. \"{s.name}\": m_VelocityRange=({vr.x:F8}, {vr.y:F8}), " +
+                                   $"m_GustinessRange=({gr.x:F8}, {gr.y:F8}), " +
+                                   $"m_LateralBlusterRange=({lbr.x:F8}, {lbr.y:F8}), " +
+                                   $"m_VerticalBlusterRange=({vbr.x:F8}, {vbr.y:F8}), " +
+                                   $"m_RTPC_Range=({rtpcr.x:F8}, {rtpcr.y:F8}), " +
+                                   $"m_ClothRandomRange=({crr.x:F8}, {crr.y:F8}), {crr.z:F8})");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                LogMessage("Inspect Wind settings failed: " + ex.Message);
+            }
         }
 
         // Add this Harmony postfix handler (paste with the other helper methods)
@@ -745,20 +836,84 @@ namespace Telemetry
                 if (inMenu) return; // avoid noise while in menus
                 if (lastWindStrength.HasValue && __instance.m_CurrentStrength.Equals(lastWindStrength.Value))
                 {
+                    //LogMessage($"Current wind (m_CurrentStrength={__instance.m_CurrentStrength}) no change from lastWindStrength: {lastWindStrength.Value}");
                     return; // no change
                 }
+
+                // Need to understand what the m_PhaseDurationHours field means and when it changes.
+                // Can the Wind Strength remain the same while m_PhaseDurationHours changes?
+                // I would think the wind duration would remain the same until the strength changes.
+                LogMessage($"Current wind (m_CurrentStrength): {__instance.m_CurrentStrength}");
+                LogMessage($"Current wind (m_PhaseDurationHours): {__instance.m_PhaseDurationHours}");
+                LogMessage($"Current wind (m_PhaseElapsedTODSeconds): {__instance.m_PhaseElapsedTODSeconds}");
+                LogMessage($"Current wind (m_CurrentMPH_Base): {__instance.m_CurrentMPH_Base}");
+                LogMessage($"Current wind (m_CurrentMPH): {__instance.m_CurrentMPH}");
+                LogMessage($"Current wind (m_ActiveSettings):");
+                LogMessage($"Current wind   (m_ActiveSettings.m_Angle): {__instance.m_ActiveSettings.m_Angle}");
+                LogMessage($"Current wind   (m_ActiveSettings.m_Velocity): {__instance.m_ActiveSettings.m_Velocity}");
+                LogMessage($"Current wind   (m_ActiveSettings.m_Gustiness): {__instance.m_ActiveSettings.m_Gustiness}");
+                LogMessage($"Current wind   (m_ActiveSettings.m_LateralBluster): {__instance.m_ActiveSettings.m_LateralBluster}");
+                LogMessage($"Current wind   (m_ActiveSettings.m_VerticalBluster): {__instance.m_ActiveSettings.m_VerticalBluster}");
+                //LogMessage($"Current wind   (m_ActiveSettings.ToString): {__instance.m_ActiveSettings.ToString}");
+
+                LogMessage($"Current wind (m_HoursBetweenWindChangeMin): {__instance.m_HoursBetweenWindChangeMin}");
+                LogMessage($"Current wind (m_HoursBetweenWindChangeMax): {__instance.m_HoursBetweenWindChangeMax}");
+                LogMessage($"Current wind (m_HoursForTransitionMin): {__instance.m_HoursForTransitionMin}");
+                LogMessage($"Current wind (m_HoursForTransitionMax): {__instance.m_HoursForTransitionMax}");
+                LogMessage($"Current wind (m_LateralBluster): {__instance.m_LateralBluster}");
+                LogMessage($"Current wind (m_LateralBluster_Limit): {__instance.m_LateralBluster_Limit}");
+                LogMessage($"Current wind (m_VerticalBluster): {__instance.m_VerticalBluster}");
+                LogMessage($"Current wind (m_VerticalBluster_Limit): {__instance.m_VerticalBluster_Limit}");
+                LogMessage($"Current wind (m_LockedWindSpeed): {__instance.m_LockedWindSpeed}");
+                LogMessage($"Current wind (m_MaxWindMPH): {__instance.m_MaxWindMPH}");
+                LogMessage($"Current wind (m_NeverCalmWind): {__instance.m_NeverCalmWind}");
+
+                LogMessage($"Current wind (m_SourceSettings):");
+                LogMessage($"Current wind   (m_SourceSettings.m_Angle): {__instance.m_SourceSettings.m_Angle}");
+                LogMessage($"Current wind   (m_SourceSettings.m_Velocity): {__instance.m_SourceSettings.m_Velocity}");
+                LogMessage($"Current wind   (m_SourceSettings.m_Gustiness): {__instance.m_SourceSettings.m_Gustiness}");
+                LogMessage($"Current wind   (m_SourceSettings.m_LateralBluster): {__instance.m_SourceSettings.m_LateralBluster}");
+                LogMessage($"Current wind   (m_SourceSettings.m_VerticalBluster): {__instance.m_SourceSettings.m_VerticalBluster}");
+                //LogMessage($"Current wind   (m_SourceSettings.ToString): {__instance.m_SourceSettings.ToString}");
+
+                LogMessage($"Current wind (m_StartHasBeenCalled): {__instance.m_StartHasBeenCalled}");
+                LogMessage($"Current wind (m_TargetSettings):");
+                LogMessage($"Current wind   (m_TargetSettings.m_Angle): {__instance.m_TargetSettings.m_Angle}");
+                LogMessage($"Current wind   (m_TargetSettings.m_Velocity): {__instance.m_TargetSettings.m_Velocity}");
+                LogMessage($"Current wind   (m_TargetSettings.m_Gustiness): {__instance.m_TargetSettings.m_Gustiness}");
+                LogMessage($"Current wind   (m_TargetSettings.m_LateralBluster): {__instance.m_TargetSettings.m_LateralBluster}");
+                LogMessage($"Current wind   (m_TargetSettings.m_VerticalBluster): {__instance.m_TargetSettings.m_VerticalBluster}");
+                //LogMessage($"Current wind   (m_TargetSettings.ToString): {__instance.m_TargetSettings.ToString}");
+
+                LogMessage($"Current wind (m_TransitionTimeTODSeconds): {__instance.m_TransitionTimeTODSeconds}");
+                LogMessage($"Current wind (m_WindChill): {__instance.m_WindChill}");
+                //LogMessage($"Current wind (m_WindKillers): {__instance.m_WindKillers}");  // I think this is about colliders that stop the wind from impacting the player...
+                //LogMessage($"Current wind (m_WindZoneTransform): {__instance.m_WindZoneTransform}");  // Transform of the WindZone game object?
+                LogMessage($"Current wind (GetSpeedMPH_Base): {__instance.GetSpeedMPH_Base()}");
+
+                // LogMessage($"Current wind (m_WindSettings): {__instance.m_WindSettings[0].m_VelocityRange}");  // This is an array of records
+                LogWindSettings(__instance);
+
+                //if (lastWindPhaseDurationHours.HasValue && __instance.m_PhaseDurationHours.Equals(lastWindPhaseDurationHours.Value))
+                //{
+                //    return; // no change
+                //}
 
                 // Wind strength has changed!  Read current wind state.
                 var currentStrength = __instance.m_CurrentStrength;
                 float currentMPH = __instance.m_CurrentMPH;
+                float? currentWindPhaseDurationHours = __instance.m_PhaseDurationHours;
 
                 // Strength change (e.g. Calm -> Blizzard) - use enum/struct equality
                 if (!lastWindStrength.HasValue || !currentStrength.Equals(lastWindStrength.Value))
                 {
                     LogMessage($"Wind strength change: {(lastWindStrength.HasValue ? lastWindStrength.Value.ToString() : "<null>")} -> {currentStrength}");
                     if (Settings.enableTelemetryHUDDisplay) try { HUDMessage.AddMessage($"Wind: {lastWindStrength?.ToString() ?? "<null>"} → {currentStrength}", 4f, true); } catch { }
+
                     // Show detailed wind numbers and matched settings
-                    LogAndShowWindFromSettings();
+                    // *************** (What happens if we don't do this?) ***************
+                    // LogAndShowWindFromSettings();
+
                     windStrengthChanged = true; // set Wind trigger flag to true for telemetry logging
                 }
                 //else
@@ -773,6 +928,7 @@ namespace Telemetry
                 // Update trackers
                 lastWindStrength = currentStrength;
                 lastWindMPH = currentMPH;
+                lastWindPhaseDurationHours = currentWindPhaseDurationHours;
             }
             catch (Exception ex)
             {

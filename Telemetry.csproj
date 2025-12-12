@@ -9,7 +9,8 @@
 
     <PropertyGroup>
         <!--This needs to be changed for the mod to compile.-->
-        <TheLongDarkPath>D:\Program Files (x86)\Steam\steamapps\common\TheLongDark</TheLongDarkPath>
+        <!-- TheLongDarkPath>D:\Program Files (x86)\Steam\steamapps\common\TheLongDark</TheLongDarkPath> -->
+        <TheLongDarkPath>D:\TLD_Archives\TLD 2.44</TheLongDarkPath>
     </PropertyGroup>
 
     <PropertyGroup>

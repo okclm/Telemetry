@@ -13,7 +13,7 @@ namespace Telemetry
 {
     internal class TelemetrySettings : JsonModSettings
     {     
-		// [Section("General (Version 1.1) - 11/25/2025")]
+		// [Section("General (Version 1.1 - 11/25/2025")]
 		[Section("General (" + TelemetryMain.MOD_VERSION_NUMBER + ")")]
 
         [Name("Enable telemetry data capture")]
