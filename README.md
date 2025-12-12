@@ -32,7 +32,7 @@ Data is captured periodically based on various triggers:
 - When there is a change in the current weather set or stage
 - When there is a change in the current wind strength
 
-The telemtry data is saved to a text file located in the game's Mods folder.
+The telemetry data is saved to a text file located in the game's Mods folder.
 The filename is formatted as the name of the current game save followed by "_Telemetry.log".  Any illegal characters are removed and blank characters are replaced with underscores.
 For example, if the name of the current game save is "FAR TERRITORY?", the telemetry data will be saved in "FAR_TERRITORY_Telemetry.log"
 
