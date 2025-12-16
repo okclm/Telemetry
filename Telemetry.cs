@@ -16,6 +16,7 @@ using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using UnityEngine;
+using UnityEngine.Playables;
 using static Il2CppSystem.Net.ServicePointManager;
 using Scene = UnityEngine.SceneManagement;
 
@@ -76,7 +77,7 @@ namespace Telemetry
         // Are we in the game menu?
         public static bool inMenu = true;
 
-        public const string MOD_VERSION_NUMBER = "Version 1.1 - 12/12/2025";      // The version # of the mod.
+        public const string MOD_VERSION_NUMBER = "Version 1.1 - 12/16/2025";      // The version # of the mod.
         //internal const string LOG_FILE_FORMAT_VERSION_NUMBER = "1.0";           // The version # of the log file format.  This is used to determine if the log file format has changed and we need to update the code to read it.
         internal const string DEFAULT_FILE_NAME = "Telemetry.log";                // The log file is written in the MODS folder for TLD  (i.e. D:\Program Files (x86)\Steam\steamapps\common\TheLongDark\Mods)
         internal const string FILE_NAME_DESMOS2D = "Telemetry_Desmos2D.log";      // The log file is written in the MODS folder for TLD  (i.e. D:\Program Files (x86)\Steam\steamapps\common\TheLongDark\Mods)
@@ -339,6 +340,7 @@ namespace Telemetry
                     Weather weatherComponent = GameManager.GetWeatherComponent();
                     WeatherStage weatherStage = weatherComponent.GetWeatherStage();
                     string weatherStageName = weatherComponent.GetWeatherStageDisplayName(weatherStage);
+                    // float x = weatherComponent.GetDuration(weatherComponent);
 
                     // WeatherSet.GetName(weatherComponent.GetCurrentWeatherSet());  // How to access the current weather set name without parsing it from the debug text.
 
@@ -357,6 +359,22 @@ namespace Telemetry
                     // Aurora alpha: 0
                     // Time Since Last Blizzard(4): 24.09688 
 
+                    // This is an example of the weather debug text broken into lines.  Note this shows multiple weather stages (lines 2 and 3).
+                    //	[0]	"Midday To Afternoon (35.35%)"
+                    //  [1] "Weather Set: HeavySnow_cannery. 4.73hrs. (39.3 %)"
+                    //  [2] "00 >> LightSnow. tr: 100.0 %. 1.86/2.39hrs"
+                    //  [3] "01___HeavySnow. tr: 0.0 %. 0.00/2.34hrs"
+                    //  [4] " Custom Type Name: "
+                    //  [5] "Wind Speed Base: 24.3 MPH. Target Wind Speed: 26.5 MPH. Angle Base: 160.6"
+                    //  [6] "Wind Actual Speed: 26.5 MPH. Actual Angle: 160.6"
+                    //  [7] "Player Speed: 0"
+                    //  [8] "Player Wind Angle: 0.0"
+                    //  [9] "Wwise WindIntensity: 36"
+                    //  [10]    "Wwise GustStrength: 10"
+                    //  [11]    "Local snow depth: 0.01834451"
+                    //  [12]    "Aurora alpha: 0"
+                    //  [13]    "Time Since Last Blizzard (48): 76.62036"
+
                     // Let's talk "stats"...
                     // StatsManager statsManager = GameManager.GetStatsManager();
 
@@ -374,6 +392,20 @@ namespace Telemetry
                         {
                             // hours is the duration of the current weather set (in hours)
                             weatherSetDurationHours = hours;
+                        }
+                    }
+
+                    //  [2] "00 >> LightSnow. tr: 100.0 %. 1.86/2.39hrs"
+                    float? weatherStageDurationHours = null;  // Duration of current weather stage in hours.   Default value is null (undefined)
+                    weatherSetLine = GetLineContaining(weatherDebugText, ">>");
+                    after = GetTextAfterSeparator(weatherSetLine, '/'); // e.g. "2.39hrs"
+                    if (after != null)
+                    {
+                        var m = Regex.Match(after, @"(\d+(\.\d+)?)\s*hrs", RegexOptions.IgnoreCase);
+                        if (m.Success && float.TryParse(m.Groups[1].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out float hours))
+                        {
+                            // hours is the duration of the current weather stage (in hours)
+                            weatherStageDurationHours = hours;
                         }
                     }
 
@@ -475,6 +507,7 @@ namespace Telemetry
                         LogData(";   weatherSet: Current weather set");
                         LogData(";   weatherSetDurationHours: Duration of current weather set in hours");
                         LogData(";   weatherStage: Current weather stage");
+                        LogData(";   weatherStageDurationHours: Duration of current weather stage in hours");
                         LogData(";   windStrength: Current wind strength (Calm, SlightlyWindy, Windy, VeryWindy, Blizzard)");
                         LogData(";   windSpeedMPH: Current wind speed in MPH");
                         LogData(";   windPhaseDurationHours: Current wind strength duration in hours");
@@ -497,6 +530,7 @@ namespace Telemetry
                         $"|{weatherSetValueText}" +
                         $"|{(weatherSetDurationHours.HasValue ? weatherSetDurationHours.Value.ToString() : "<null>"),2}" +
                         $"|{weatherStage,2}" +
+                        $"|{(weatherStageDurationHours.HasValue ? weatherStageDurationHours.Value.ToString() : "<null>"),2}" +
                         $"|{(lastWindStrength.HasValue ? lastWindStrength.Value.ToString() : "<null>"),2}" + 
                         $"|{(lastWindMPH.HasValue ? lastWindMPH.Value.ToString() : "<null>"),2}" + 
                         $"|{(lastWindPhaseDurationHours.HasValue ? lastWindPhaseDurationHours.Value.ToString() : "<null>"),2}" + 
@@ -599,6 +633,17 @@ namespace Telemetry
             int ix = line.IndexOf(separator);
             if (ix < 0) return null;
             return line.Substring(0, ix).Trim();
+        }
+
+        private static string? GetLineContaining(string multiLine, string target, StringComparison comparison = StringComparison.OrdinalIgnoreCase)
+        {
+            if (string.IsNullOrEmpty(multiLine) || target is null)
+                return null;
+
+            return multiLine
+                .Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(line => line.Trim())
+                .FirstOrDefault(line => line.Contains(target, comparison));
         }
 
         // Helper methods to track and log the current weather stage changes
@@ -868,22 +913,37 @@ namespace Telemetry
                 LogMessage($"Current wind (m_MaxWindMPH): {__instance.m_MaxWindMPH}");
                 LogMessage($"Current wind (m_NeverCalmWind): {__instance.m_NeverCalmWind}");
 
-                LogMessage($"Current wind (m_SourceSettings):");
-                LogMessage($"Current wind   (m_SourceSettings.m_Angle): {__instance.m_SourceSettings.m_Angle}");
-                LogMessage($"Current wind   (m_SourceSettings.m_Velocity): {__instance.m_SourceSettings.m_Velocity}");
-                LogMessage($"Current wind   (m_SourceSettings.m_Gustiness): {__instance.m_SourceSettings.m_Gustiness}");
-                LogMessage($"Current wind   (m_SourceSettings.m_LateralBluster): {__instance.m_SourceSettings.m_LateralBluster}");
-                LogMessage($"Current wind   (m_SourceSettings.m_VerticalBluster): {__instance.m_SourceSettings.m_VerticalBluster}");
-                //LogMessage($"Current wind   (m_SourceSettings.ToString): {__instance.m_SourceSettings.ToString}");
+                if (__instance.m_SourceSettings==null)
+                {
+                    LogMessage($"Current wind (m_SourceSettings): NULL");
+                }
+                else
+                {
+                    LogMessage($"Current wind (m_SourceSettings):");
+                    LogMessage($"Current wind   (m_SourceSettings.m_Angle): {__instance.m_SourceSettings.m_Angle}");
+                    LogMessage($"Current wind   (m_SourceSettings.m_Velocity): {__instance.m_SourceSettings.m_Velocity}");
+                    LogMessage($"Current wind   (m_SourceSettings.m_Gustiness): {__instance.m_SourceSettings.m_Gustiness}");
+                    LogMessage($"Current wind   (m_SourceSettings.m_LateralBluster): {__instance.m_SourceSettings.m_LateralBluster}");
+                    LogMessage($"Current wind   (m_SourceSettings.m_VerticalBluster): {__instance.m_SourceSettings.m_VerticalBluster}");
+                    //LogMessage($"Current wind   (m_SourceSettings.ToString): {__instance.m_SourceSettings.ToString}");
+                }
 
                 LogMessage($"Current wind (m_StartHasBeenCalled): {__instance.m_StartHasBeenCalled}");
-                LogMessage($"Current wind (m_TargetSettings):");
-                LogMessage($"Current wind   (m_TargetSettings.m_Angle): {__instance.m_TargetSettings.m_Angle}");
-                LogMessage($"Current wind   (m_TargetSettings.m_Velocity): {__instance.m_TargetSettings.m_Velocity}");
-                LogMessage($"Current wind   (m_TargetSettings.m_Gustiness): {__instance.m_TargetSettings.m_Gustiness}");
-                LogMessage($"Current wind   (m_TargetSettings.m_LateralBluster): {__instance.m_TargetSettings.m_LateralBluster}");
-                LogMessage($"Current wind   (m_TargetSettings.m_VerticalBluster): {__instance.m_TargetSettings.m_VerticalBluster}");
-                //LogMessage($"Current wind   (m_TargetSettings.ToString): {__instance.m_TargetSettings.ToString}");
+
+                if (__instance.m_TargetSettings == null)
+                {
+                    LogMessage($"Current wind (m_TargetSettings): NULL");
+                }
+                else
+                {
+                    LogMessage($"Current wind (m_TargetSettings):");
+                    LogMessage($"Current wind   (m_TargetSettings.m_Angle): {__instance.m_TargetSettings.m_Angle}");
+                    LogMessage($"Current wind   (m_TargetSettings.m_Velocity): {__instance.m_TargetSettings.m_Velocity}");
+                    LogMessage($"Current wind   (m_TargetSettings.m_Gustiness): {__instance.m_TargetSettings.m_Gustiness}");
+                    LogMessage($"Current wind   (m_TargetSettings.m_LateralBluster): {__instance.m_TargetSettings.m_LateralBluster}");
+                    LogMessage($"Current wind   (m_TargetSettings.m_VerticalBluster): {__instance.m_TargetSettings.m_VerticalBluster}");
+                    //LogMessage($"Current wind   (m_TargetSettings.ToString): {__instance.m_TargetSettings.ToString}");
+                }
 
                 LogMessage($"Current wind (m_TransitionTimeTODSeconds): {__instance.m_TransitionTimeTODSeconds}");
                 LogMessage($"Current wind (m_WindChill): {__instance.m_WindChill}");

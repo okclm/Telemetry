@@ -17,6 +17,7 @@ It collects various telemetry data while playing for use outside of the game. Th
 - weatherSet: Current weather set
 - weatherSetDurationHours: Duration of current weather set in hours
 - weatherStage: Current weather stage
+- weatherStageDurationHours: Duration of current weather stage in hours
 - windStrength: Current wind strength (Calm, SlightlyWindy, Windy, VeryWindy, Blizzard)
 - windSpeedMPH: Current wind speed in MPH
 - windPhaseDurationHours: Current wind strength duration in hours
