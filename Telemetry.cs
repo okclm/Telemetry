@@ -49,6 +49,47 @@ using Scene = UnityEngine.SceneManagement;
 
 // Example usage with HUDMessage
 HUDMessage.AddMessage("Press " + s1);
+
+// Could we teleport the player to a specific location?
+// Grok:
+
+            var player = GameManager.GetPlayerManagerComponent();
+            float x = 100f, y = 200f, z = 300f;
+
+            var playerManager = GameManager.GetPlayerManagerComponent();
+            if (playerManager != null)
+            {
+                Transform playerTransform = GameManager.GetPlayerTransform();  // Preferred method
+                                                                               // Alternative if above returns null: GameManager.GetPlayerObject()?.transform
+
+                Quaternion currentRotation = (playerTransform != null)
+                    ? playerTransform.rotation
+                    : Quaternion.identity;  // Fallback to no rotation change
+
+                // Optional ground snap for safer landing
+                Vector3 targetPos = new Vector3(x, y + 5f, z);  // Start above to raycast down
+                if (Physics.Raycast(targetPos, Vector3.down, out RaycastHit hit, 50f))
+                {
+                    targetPos = hit.point + Vector3.up * 1f;  // Slight offset to avoid sinking
+                }
+
+                playerManager.TeleportPlayer(targetPos, currentRotation);
+
+                // MelonLogger.Msg($"Teleported to ({targetPos.x}, {targetPos.y}, {targetPos.z}) preserving rotation");
+
+                // Response
+                // var buffer = System.Text.Encoding.UTF8.GetBytes("Teleported successfully!");
+                // response.ContentLength64 = buffer.Length;
+                // response.OutputStream.Write(buffer, 0, buffer.Length);
+            }
+            else
+            {
+                // Handle null playerManager
+                // response.StatusCode = 500;
+            }
+
+
+
  */
 
 namespace Telemetry
@@ -77,7 +118,7 @@ namespace Telemetry
         // Are we in the game menu?
         public static bool inMenu = true;
 
-        public const string MOD_VERSION_NUMBER = "Version 1.1 - 12/16/2025";      // The version # of the mod.
+        public const string MOD_VERSION_NUMBER = "Version 1.1 - 01/05/2026";      // The version # of the mod.
         //internal const string LOG_FILE_FORMAT_VERSION_NUMBER = "1.0";           // The version # of the log file format.  This is used to determine if the log file format has changed and we need to update the code to read it.
         internal const string DEFAULT_FILE_NAME = "Telemetry.log";                // The log file is written in the MODS folder for TLD  (i.e. D:\Program Files (x86)\Steam\steamapps\common\TheLongDark\Mods)
         internal const string FILE_NAME_DESMOS2D = "Telemetry_Desmos2D.log";      // The log file is written in the MODS folder for TLD  (i.e. D:\Program Files (x86)\Steam\steamapps\common\TheLongDark\Mods)
@@ -303,9 +344,12 @@ namespace Telemetry
                     return;     // When gameTime is zero, nothing to do here.
                 }
 
-                // Have we moved far enough to do something?
-                // Or, did the user press the capture telemetry key?
-                // Or did the waitTime elapse?
+                // Do we have at least one trigger condition satisfied?
+                //   When the player presses a specific key
+                //   At regular game time intervals in seconds (if enabled)
+                //   When the player moves a certain distance in meters (if enabled)
+                //   When there is a change in the current weather set or stage (if enabled)
+                //   When there is a change in the current wind strength (if enabled)
                 if ((Settings.enableTelemetryTimeDataCapture && (timer > Settings.waitTime)) || 
                     (Settings.enableTelemetryDistanceDataCapture && (howFar > Settings.distanceThreshold)) ||
                     (Settings.enableTelemetryWeatherChangeDataCapture && (weatherStageChanged == true)) ||
@@ -313,18 +357,24 @@ namespace Telemetry
                     InputManager.GetKeyDown(InputManager.m_CurrentContext, Settings.options.captureKey))
                 {
                     // Are we here because the distance threshold was met or because the user pressed the capture key?
-                    string triggerCode = "K";   // Default is we are here because of a keypress.
-                    if (howFar > Settings.distanceThreshold) { triggerCode = "D"; }  // We are here because the distance threshold was exceeded.
-                    if (timer > Settings.waitTime) { triggerCode = "T"; }            // We are here because the waittime threshold was exceeded.
-                    if (weatherStageChanged == true) { triggerCode = "W"; }          // We are here because the weather stage changed.
+                    // 1 or more trigger conditions are satisfied.
+                    // For logging purposes, we need to know which one caused us to be here.
+                    // And because multiple conditions can be satisfied at once, we have a priority order:
+                    // 1. Keypress
+                    // 2. Distance threshold exceeded
+                    // 3. Wait time exceeded
+                    // 4. Weather stage changed
+                    // 5. Wind strength changed
+                    string triggerCode = "";   // Default to no trigger code.
                     if (windStrengthChanged == true) { triggerCode = "w"; }          // We are here because the wind changed.
+                    if (weatherStageChanged == true) { triggerCode = "W"; }          // We are here because the weather stage changed.
+                    if (timer > Settings.waitTime) { triggerCode = "T"; }            // We are here because the waittime threshold was exceeded.
+                    if (howFar > Settings.distanceThreshold) { triggerCode = "D"; }  // We are here because the distance threshold was exceeded.
+                    if (InputManager.GetKeyDown(InputManager.m_CurrentContext, Settings.options.captureKey)) { triggerCode = "K"; } // We are here because of keypress.
+                    if (triggerCode == "") { triggerCode = "K"; }                    // Unknown trigger.  This should not happen.  We will set to the default of "K" for keypress.
 
                     // Deterine IRL time.  We use this to timestamp the data with the current IRL time.
                     string irlDateTime = DateTime.Now.ToString("MM/dd/yyyy HH:mm:ss");
-
-                    // Moved to above to address gameTime zero issue.
-                    // Determine the hours played.  This is a float and we can use it as a timestamp for the data.
-                    //float gameTime = GameManager.GetTimeOfDayComponent().GetHoursPlayedNotPaused();
 
                     // Determine current scene name
                     string? sceneName = Scene.SceneManager.GetActiveScene().name;
